@@ -27,11 +27,11 @@ pub trait Platform {
     ) -> bool;
     /// Sets up input state
     fn prepare_frame(&mut self, io: &mut Io, window: &Self::Window);
-    ///
+    /// TODO: docstring
     fn prepare_render(&mut self, ui: &Ui<'_>, window: &Self::Window);
 }
 
-/// Half of an `imgui-rs` backend
+/// Half of an `imgui-rs` backend. See also: [`helper::RendererImplUtil`]
 pub trait Renderer {
     /// Rendering context
     type Device;

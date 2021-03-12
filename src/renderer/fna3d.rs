@@ -8,7 +8,6 @@ ImGUI renderer implementation in FNA3D based on [the example]
 */
 
 use {
-    anyhow::{Context, Error},
     imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
     std::{mem::size_of, rc::Rc},
     thiserror::Error,
@@ -199,7 +198,6 @@ impl RendererImplUtil for ImGuiFna3d {
     fn draw(
         &mut self,
         device: &<Self as Renderer>::Device,
-        scissors_rect: &[f32; 4],
         draw_params: &DrawCmdParams,
         n_elems: usize,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
@@ -218,20 +216,8 @@ impl RendererImplUtil for ImGuiFna3d {
                 .ok_or_else(|| ImGuiRendererError::BadTexture(*texture_id))?
         };
 
-        // FIXME:
-        let scissors_rect = fna3d::Rect {
-            x: f32::max(0.0, clip_rect[0]).floor() as i32,
-            y: f32::max(0.0, clip_rect[1]).floor() as i32,
-            w: (clip_rect[2] - clip_rect[0]).abs().ceil() as i32,
-            h: (clip_rect[3] - clip_rect[1]).abs().ceil() as i32,
-        };
-
-        self.batch.prepare_draw(
-            device,
-            &scissors_rect,
-            texture.texture.raw,
-            *vtx_offset as u32,
-        );
+        self.batch
+            .prepare_draw(device, texture.texture.raw, *vtx_offset as u32);
 
         let n_vertices = n_elems as u32 * 2 / 3; // n_verts : n_idx = 4 : 6
         let n_primitives = n_elems / 3;
@@ -299,12 +285,9 @@ impl Batch {
     fn prepare_draw(
         &mut self,
         device: &fna3d::Device,
-        scissors_rect: &fna3d::Rect,
         texture: *mut fna3d::Texture,
         vtx_offset: u32,
     ) {
-        device.set_scissor_rect(&scissors_rect);
-
         // apply effect
         let state_changes = fna3d::mojo::EffectStateChanges {
             render_state_change_count: 0,
