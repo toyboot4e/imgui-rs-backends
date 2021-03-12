@@ -1,5 +1,5 @@
 /*!
-Rust-SDL2 event handler for ImGUI
+Rust-SDL2 platform integration for `imgui-rs`
 
 This is very much based on [rust-imgui-sdl2]. Many thanks to them!
 
@@ -16,9 +16,9 @@ use {
     },
 };
 
-use crate::InputHandler;
+use crate::Platform;
 
-/// SDL2 backend for ImGUI
+/// SDL2 platform for `imgui-rs`
 pub struct ImGuiSdl2 {
     mouse_press: [bool; 5],
     ignore_mouse: bool,
@@ -99,11 +99,11 @@ impl ImGuiSdl2 {
     }
 }
 
-impl InputHandler for ImGuiSdl2 {
+impl Platform for ImGuiSdl2 {
     type Event = sdl2::event::Event;
     type Window = sdl2::video::Window;
 
-    fn handle_event(&mut self, imgui: &mut Context, event: &Self::Event) -> bool {
+    fn handle_event(&mut self, imgui: &mut Context, _window:&Self::Window, event: &Self::Event) -> bool {
         use sdl2::keyboard;
         use sdl2::mouse::MouseButton;
 

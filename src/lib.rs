@@ -3,23 +3,28 @@ Backend for [`imgui-rs`]
 
 [`imgui-rs`]: https://github.com/Gekkio/imgui-rs
 
-[`imgui-rs`] backends are made of input handler + renderer. `imgui-backend` separates them and allows
-any combination of them.
+[`imgui-rs`] backends are made of platform + renderer. `imgui-backend` separates and combines them
+so that any combination is allowed.
 */
 
 pub mod helper;
-pub mod input_handler;
+pub mod platform;
 pub mod renderer;
 
 use imgui::{Context, Io, Ui};
 
 /// Half of an `imgui-rs` backend
-pub trait InputHandler {
+pub trait Platform {
     type Event;
     /// Dependency for setti
     type Window;
     /// Return if the event is captured by ImGUI
-    fn handle_event(&mut self, imgui: &mut Context, event: &Self::Event) -> bool;
+    fn handle_event(
+        &mut self,
+        imgui: &mut Context,
+        window: &Self::Window,
+        event: &Self::Event,
+    ) -> bool;
     /// Sets up input state
     fn prepare_frame(&mut self, io: &mut Io, window: &Self::Window);
     ///
@@ -36,49 +41,48 @@ pub trait Renderer {
     fn render(&mut self, draw_data: &imgui::DrawData, device: &mut Self::Device) -> Self::Result;
 }
 
-/// `imgui-rs` backend made of [`InputHandler`] and [`Renderer`]
-pub struct Backend<I, R>
+/// `imgui-rs` backend
+pub struct Backend<P, R>
 where
-    I: InputHandler,
+    P: Platform,
     R: Renderer,
 {
     pub context: imgui::Context,
-    pub input_handler: I,
+    pub platform: P,
     pub renderer: R,
 }
 
-impl<I, R> Backend<I, R>
+impl<P, R> Backend<P, R>
 where
-    I: InputHandler,
+    P: Platform,
     R: Renderer,
 {
     pub fn io_mut(&mut self) -> &mut imgui::Io {
         self.context.io_mut()
     }
 
-    pub fn handle_event(&mut self, ev: &I::Event) -> bool {
-        self.input_handler.handle_event(&mut self.context, ev)
+    pub fn handle_event(&mut self, window: &P::Window, ev: &P::Event) -> bool {
+        self.platform.handle_event(&mut self.context, window, ev)
     }
 
     pub fn frame<'ui, 'w, 'd>(
         &'ui mut self,
-        window: &'w I::Window,
+        window: &'w P::Window,
         device: &'d mut R::Device,
-    ) -> BackendUi<'ui, 'w, 'd, I, R> {
-        self.input_handler
-            .prepare_frame(self.context.io_mut(), window);
+    ) -> BackendUi<'ui, 'w, 'd, P, R> {
+        self.platform.prepare_frame(self.context.io_mut(), window);
         let ui = self.context.frame();
         BackendUi {
             ui,
-            input_handler: &mut self.input_handler,
+            platform: &mut self.platform,
             renderer: &mut self.renderer,
             window,
             device,
         }
     }
 
-    // pub fn frame(&mut self, window: &I::Window) -> imgui::Ui {
-    //     self.input_handler
+    // pub fn frame(&mut self, window: &P::Window) -> imgui::Ui {
+    //     self.platform
     //         .prepare_frame(self.context.io_mut(), window);
     //     self.context.frame()
     // }
@@ -86,41 +90,42 @@ where
     // pub fn render(
     //     &mut self,
     //     ui: imgui::Ui,
-    //     window: &I::Window,
+    //     window: &P::Window,
     //     device: &mut R::Device,
     // ) -> R::Result {
-    //     self.input_handler.prepare_render(&ui, window);
+    //     self.platform.prepare_render(&ui, window);
     //     self.renderer.render(ui.render(), device)
     // }
 }
 
-pub struct BackendUi<'ui, 'w, 'd, I, R>
+/// Wrapped [`Ui`](imgui::Ui) that can be rendered with backend
+pub struct BackendUi<'ui, 'w, 'd, P, R>
 where
-    I: InputHandler,
+    P: Platform,
     R: Renderer,
 {
     pub ui: imgui::Ui<'ui>,
-    pub input_handler: &'ui mut I,
+    pub platform: &'ui mut P,
     pub renderer: &'ui mut R,
-    pub window: &'w I::Window,
+    pub window: &'w P::Window,
     pub device: &'d mut R::Device,
 }
 
-impl<'ui, 'w, 'd, I, R> BackendUi<'ui, 'w, 'd, I, R>
+impl<'ui, 'w, 'd, P, R> BackendUi<'ui, 'w, 'd, P, R>
 where
-    I: InputHandler,
+    P: Platform,
     R: Renderer,
 {
     /// Be sure to call this method to render
     pub fn render_with_backend(self) -> R::Result {
-        self.input_handler.prepare_render(&self.ui, self.window);
+        self.platform.prepare_render(&self.ui, self.window);
         self.renderer.render(self.ui.render(), self.device)
     }
 }
 
-impl<'ui, 'w, 'd, I, R> std::ops::Deref for BackendUi<'ui, 'w, 'd, I, R>
+impl<'ui, 'w, 'd, P, R> std::ops::Deref for BackendUi<'ui, 'w, 'd, P, R>
 where
-    I: InputHandler,
+    P: Platform,
     R: Renderer,
 {
     type Target = imgui::Ui<'ui>;
@@ -129,9 +134,9 @@ where
     }
 }
 
-impl<'ui, 'w, 'd, I, R> std::ops::DerefMut for BackendUi<'ui, 'w, 'd, I, R>
+impl<'ui, 'w, 'd, P, R> std::ops::DerefMut for BackendUi<'ui, 'w, 'd, P, R>
 where
-    I: InputHandler,
+    P: Platform,
     R: Renderer,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {

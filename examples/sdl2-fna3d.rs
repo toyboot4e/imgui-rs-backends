@@ -5,7 +5,7 @@ SDL2 + Rust-FNA3D example
 use {
     anyhow::{Error, Result},
     fna3d::Color,
-    imgui_backends::{helper::QuickStart, input_handler::ImGuiSdl2, renderer::ImGuiFna3d},
+    imgui_backends::{helper::QuickStart, platform::ImGuiSdl2, renderer::ImGuiFna3d},
     sdl2::event::Event,
     std::time::Duration,
 };
@@ -19,7 +19,7 @@ const H: u32 = 720;
 pub struct Init {
     pub sdl: sdl2::Sdl,
     pub vid: sdl2::VideoSubsystem,
-    pub window: sdl2::video::Window,
+    pub win: sdl2::video::Window,
     pub params: fna3d::PresentationParameters,
     pub device: fna3d::Device,
 }
@@ -27,7 +27,7 @@ pub struct Init {
 impl Init {
     /// Use it when calling [`fna3d::Device::swap_buffers`]
     pub fn raw_window(&self) -> *mut sdl2::sys::SDL_Window {
-        self.window.raw()
+        self.win.raw()
     }
 
     /// Initializes the FNA3D device and the SDL2 window, wrapping them to an [`Init`] struct
@@ -87,19 +87,21 @@ impl Init {
         Ok(Init {
             sdl,
             vid,
-            window: win,
+            win,
             params,
             device,
         })
     }
+}
 
+impl Init {
     pub fn create_imgui_backend(&mut self, mut icx: imgui::Context) -> Result<Backend> {
-        let input_handler = ImGuiSdl2::new(&mut icx, &self.window);
+        let platform = ImGuiSdl2::new(&mut icx, &self.win);
         let renderer = ImGuiFna3d::init(&mut icx, &self.device)?;
 
         Ok(Backend {
             context: icx,
-            input_handler,
+            platform,
             renderer,
         })
     }
@@ -133,7 +135,7 @@ pub fn main() -> Result<()> {
                 _ => {}
             }
 
-            backend.handle_event(&ev);
+            backend.handle_event(&init.win, &ev);
 
             init.device.clear(
                 fna3d::ClearOptions::TARGET,
@@ -142,7 +144,7 @@ pub fn main() -> Result<()> {
                 0,   // stencil
             );
 
-            let ui = backend.frame(&init.window, &mut init.device);
+            let ui = backend.frame(&init.win, &mut init.device);
 
             let mut b = true;
             ui.show_demo_window(&mut b);
