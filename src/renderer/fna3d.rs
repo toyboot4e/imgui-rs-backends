@@ -7,18 +7,27 @@ FIXME: It is a bad practice to use `raw_device` field because it may drop earlie
 */
 
 use {
-    imgui::{im_str, internal::RawWrapper, BackendFlags, DrawCmd, DrawCmdParams},
+    imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
     std::{mem::size_of, rc::Rc},
     thiserror::Error,
 };
 
-use crate::Renderer;
+use crate::{helper::RendererImplUtil, Renderer};
 
 /// `SpriteEffect.fxb`
 pub const SHADER: &[u8] = include_bytes!("fna3d/SpriteEffect.fxb");
 
 /// `mplus-1p-regular.ttf`
 pub const JP_FONT: &[u8] = include_bytes!("../../assets/mplus-1p-regular.ttf");
+
+/// Number of quadliterals
+const N_QUADS: usize = 2048;
+
+/// Size of a vertex in bytes
+const VERT_SIZE: usize = 20;
+
+/// Size of an index in bytes
+const INDEX_SIZE: usize = 2;
 
 // TODO: extend and use this error
 #[derive(Debug, Error)]
@@ -31,6 +40,7 @@ pub enum ImGuiRendererError {
 pub type Result<T> = std::result::Result<T, ImGuiRendererError>;
 
 /// GPU texture with size
+#[derive(Debug)]
 pub struct TextureData2d {
     pub raw: *mut fna3d::Texture,
     device: fna3d::Device,
@@ -45,6 +55,7 @@ impl Drop for TextureData2d {
 }
 
 /// Reference counted version of [`TextureData2d`]
+#[derive(Debug)]
 pub struct RcTexture2d {
     pub texture: Rc<TextureData2d>,
 }
@@ -58,6 +69,7 @@ impl RcTexture2d {
 }
 
 /// FNA3D ImGUI renderer
+#[derive(Debug)]
 pub struct ImGuiFna3d {
     textures: imgui::Textures<RcTexture2d>,
     font_texture: RcTexture2d,
@@ -133,33 +145,31 @@ impl ImGuiFna3d {
 
 impl Renderer for ImGuiFna3d {
     type Device = fna3d::Device;
-    type Result = self::Result<()>;
+    type Error = Box<dyn std::error::Error>;
 
-    fn render(&mut self, draw_data: &imgui::DrawData, device: &mut Self::Device) -> Self::Result {
-        // TODO: restore/restore previous state
-        device.set_blend_state(&fna3d::BlendState::non_premultiplied());
-        let res = self.render_impl(draw_data, device);
-        device.set_blend_state(&fna3d::BlendState::alpha_blend());
-        // SamplerState.LinearWrap;
-        // DepthStencilState.None;
-        // RasterizerState = RasterizerState.CullNone;
-        res
+    fn render(
+        &mut self,
+        draw_data: &imgui::DrawData,
+        device: &mut Self::Device,
+    ) -> std::result::Result<(), Self::Error> {
+        crate::helper::render(self, draw_data, device)
     }
 }
 
-impl ImGuiFna3d {
-    fn render_impl(
+impl RendererImplUtil for ImGuiFna3d {
+    fn before_render(
         &mut self,
-        draw_data: &imgui::DrawData,
-        device: &fna3d::Device,
-    ) -> <Self as Renderer>::Result {
-        let fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
-        let fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
+        device: &mut <Self as Renderer>::Device,
+    ) -> std::result::Result<(), <Self as Renderer>::Error> {
+        device.set_blend_state(&fna3d::BlendState::non_premultiplied());
+        Ok(())
+    }
 
-        if fb_width <= 0.0 || fb_height <= 0.0 {
-            return Ok(());
-        }
+    fn after_render(&mut self, _device: &mut <Self as Renderer>::Device) {
+        //
+    }
 
+    fn set_proj_mat(&mut self, draw_data: &DrawData) {
         // set prjection matrix
         let mat = fna3d::mojo::orthographic_off_center(
             // left, right
@@ -172,6 +182,7 @@ impl ImGuiFna3d {
             1.0,
             0.0,
         );
+
         unsafe {
             let name = "MatrixTransform";
             let name = std::ffi::CString::new(name).unwrap();
@@ -179,90 +190,62 @@ impl ImGuiFna3d {
                 log::warn!("failed to set projection matrix in FNA3D ImGUI renderer");
             }
         }
+    }
 
-        let clip_off = draw_data.display_pos;
-        let clip_scale = draw_data.framebuffer_scale;
+    fn set_draw_list(&mut self, draw_list: &imgui::DrawList, device: &<Self as Renderer>::Device) {
+        self.batch.set_draw_list(draw_list, device);
+    }
 
-        for draw_list in draw_data.draw_lists() {
-            self.batch.set_draw_list(draw_list, device);
+    fn draw(
+        &mut self,
+        device: &<Self as Renderer>::Device,
+        scissors_rect: &[f32; 4],
+        draw_params: &DrawCmdParams,
+        n_elems: usize,
+    ) -> std::result::Result<(), <Self as Renderer>::Error> {
+        let DrawCmdParams {
+            clip_rect,
+            texture_id,
+            vtx_offset,
+            idx_offset,
+        } = draw_params;
 
-            for cmd in draw_list.commands() {
-                match cmd {
-                    DrawCmd::Elements {
-                        count, // this is actually `n_indices`
-                        cmd_params:
-                            DrawCmdParams {
-                                clip_rect,
-                                texture_id,
-                                vtx_offset,
-                                idx_offset,
-                            },
-                    } => {
-                        let clip_rect = [
-                            (clip_rect[0] - clip_off[0]) * clip_scale[0],
-                            (clip_rect[1] - clip_off[1]) * clip_scale[1],
-                            (clip_rect[2] - clip_off[0]) * clip_scale[0],
-                            (clip_rect[3] - clip_off[1]) * clip_scale[1],
-                        ];
+        let texture = if texture_id.id() == usize::MAX {
+            &self.font_texture
+        } else {
+            self.textures
+                .get(*texture_id)
+                .ok_or_else(|| ImGuiRendererError::BadTexture(*texture_id))?
+        };
 
-                        // FIXME:
-                        if clip_rect[0] >= fb_width
-                            || clip_rect[1] >= fb_height
-                            || clip_rect[2] < 0.0
-                            || clip_rect[3] < 0.0
-                        {
-                            // skip
-                        } else {
-                            // draw
+        // FIXME:
+        let scissors_rect = fna3d::Rect {
+            x: f32::max(0.0, clip_rect[0]).floor() as i32,
+            y: f32::max(0.0, clip_rect[1]).floor() as i32,
+            w: (clip_rect[2] - clip_rect[0]).abs().ceil() as i32,
+            h: (clip_rect[3] - clip_rect[1]).abs().ceil() as i32,
+        };
 
-                            let texture = if texture_id.id() == usize::MAX {
-                                &self.font_texture
-                            } else {
-                                self.textures
-                                    .get(texture_id)
-                                    .ok_or_else(|| ImGuiRendererError::BadTexture(texture_id))?
-                            };
+        self.batch.prepare_draw(
+            device,
+            &scissors_rect,
+            texture.texture.raw,
+            *vtx_offset as u32,
+        );
 
-                            // FIXME:
-                            let scissors_rect = fna3d::Rect {
-                                x: f32::max(0.0, clip_rect[0]).floor() as i32,
-                                y: f32::max(0.0, clip_rect[1]).floor() as i32,
-                                w: (clip_rect[2] - clip_rect[0]).abs().ceil() as i32,
-                                h: (clip_rect[3] - clip_rect[1]).abs().ceil() as i32,
-                            };
+        let n_vertices = n_elems as u32 * 2 / 3; // n_verts : n_idx = 4 : 6
+        let n_primitives = n_elems / 3;
 
-                            self.batch.prepare_draw(
-                                device,
-                                &scissors_rect,
-                                texture.texture.raw,
-                                vtx_offset as u32,
-                            );
-
-                            // `count` is actually `n_indices`
-                            let n_vertices = count as u32 * 2 / 3; // n_verts : n_idx = 4 : 6
-                            let n_primitives = count / 3;
-
-                            device.draw_indexed_primitives(
-                                fna3d::PrimitiveType::TriangleList,
-                                vtx_offset as u32,
-                                0,
-                                n_vertices,
-                                idx_offset as u32,
-                                n_primitives as u32,
-                                self.batch.ibuf.buf,
-                                fna3d::IndexElementSize::Bits16,
-                            );
-                        }
-                    }
-                    DrawCmd::ResetRenderState => {
-                        log::warn!("fna3d-imgui-rs: ResetRenderState not implemented");
-                    }
-                    DrawCmd::RawCallback { callback, raw_cmd } => unsafe {
-                        callback(draw_list.raw(), raw_cmd)
-                    },
-                }
-            }
-        }
+        device.draw_indexed_primitives(
+            fna3d::PrimitiveType::TriangleList,
+            *vtx_offset as u32,
+            0,
+            n_vertices,
+            *idx_offset as u32,
+            n_primitives as u32,
+            self.batch.ibuf.buf,
+            fna3d::IndexElementSize::Bits16,
+        );
 
         Ok(())
     }
@@ -274,6 +257,7 @@ impl ImGuiFna3d {
 /// Buffer of GPU buffers
 ///
 /// Drops internal buffers automatically.
+#[derive(Debug)]
 struct Batch {
     device: fna3d::Device,
     ibuf: GpuIndexBuffer,
@@ -292,7 +276,6 @@ impl Drop for Batch {
 
 impl Batch {
     fn new(device: fna3d::Device) -> Self {
-        const N_QUADS: usize = 2048; // buffers are pre-allocated for this number
         let vbuf = GpuVertexBuffer::new(&device, 4 * N_QUADS); // four vertices per quad
         let ibuf = GpuIndexBuffer::new(&device, 6 * N_QUADS); // six indices per quad
 
@@ -350,6 +333,7 @@ impl Batch {
     }
 }
 
+#[derive(Debug)]
 struct GpuVertexBuffer {
     buf: *mut fna3d::Buffer,
     capacity_in_bytes: usize,
@@ -384,6 +368,7 @@ impl GpuVertexBuffer {
     }
 }
 
+#[derive(Debug)]
 struct GpuIndexBuffer {
     buf: *mut fna3d::Buffer,
     capacity_in_bytes: usize,
@@ -418,12 +403,6 @@ impl GpuIndexBuffer {
     }
 }
 
-/// Size of a vertex in byte
-const VERT_SIZE: usize = 20;
-
-/// Size of an index in byte
-const INDEX_SIZE: usize = 2;
-
 /// Attributes of [`imgui::DrawVert`]
 ///
 /// * pos: [f32; 2]
@@ -455,13 +434,3 @@ const VERT_DECL: fna3d::VertexDeclaration = fna3d::VertexDeclaration {
     elementCount: 3,
     elements: VERT_ELEMS.as_ptr() as *mut _,
 };
-
-#[cfg(test)]
-mod test {
-    use std::mem::size_of;
-
-    #[test]
-    fn test_size() {
-        assert_eq!(size_of::<imgui::DrawVert>(), 20);
-    }
-}

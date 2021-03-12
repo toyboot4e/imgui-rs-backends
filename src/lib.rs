@@ -35,10 +35,13 @@ pub trait Platform {
 pub trait Renderer {
     /// Rendering context
     type Device;
-    /// Return type
-    type Result;
+    type Error;
     /// Render
-    fn render(&mut self, draw_data: &imgui::DrawData, device: &mut Self::Device) -> Self::Result;
+    fn render(
+        &mut self,
+        draw_data: &imgui::DrawData,
+        device: &mut Self::Device,
+    ) -> std::result::Result<(), Self::Error>;
 }
 
 /// `imgui-rs` backend
@@ -80,22 +83,6 @@ where
             device,
         }
     }
-
-    // pub fn frame(&mut self, window: &P::Window) -> imgui::Ui {
-    //     self.platform
-    //         .prepare_frame(self.context.io_mut(), window);
-    //     self.context.frame()
-    // }
-
-    // pub fn render(
-    //     &mut self,
-    //     ui: imgui::Ui,
-    //     window: &P::Window,
-    //     device: &mut R::Device,
-    // ) -> R::Result {
-    //     self.platform.prepare_render(&ui, window);
-    //     self.renderer.render(ui.render(), device)
-    // }
 }
 
 /// Wrapped [`Ui`](imgui::Ui) that can be rendered with backend
@@ -117,7 +104,7 @@ where
     R: Renderer,
 {
     /// Be sure to call this method to render
-    pub fn render_with_backend(self) -> R::Result {
+    pub fn render_with_backend(self) -> std::result::Result<(), R::Error> {
         self.platform.prepare_render(&self.ui, self.window);
         self.renderer.render(self.ui.render(), self.device)
     }

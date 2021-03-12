@@ -149,7 +149,9 @@ pub fn main() -> Result<()> {
             let mut b = true;
             ui.show_demo_window(&mut b);
 
-            ui.render_with_backend()?;
+            // FIXME:
+            ui.render_with_backend().unwrap();
+            // ui.render_with_backend()?;
 
             init.device
                 .swap_buffers(None, None, init.raw_window() as *mut _);
