@@ -8,6 +8,7 @@ ImGUI renderer implementation in FNA3D based on [the example]
 */
 
 use {
+    anyhow::{Context, Error},
     imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
     std::{mem::size_of, rc::Rc},
     thiserror::Error,
@@ -145,7 +146,7 @@ impl ImGuiFna3d {
 
 impl Renderer for ImGuiFna3d {
     type Device = fna3d::Device;
-    type Error = Box<dyn std::error::Error>;
+    type Error = anyhow::Error;
 
     fn render(
         &mut self,

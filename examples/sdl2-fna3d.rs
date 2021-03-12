@@ -5,7 +5,9 @@ SDL2 + Rust-FNA3D
 use {
     anyhow::{Error, Result},
     fna3d::Color,
-    imgui_backends::{helper::QuickStart, platform::ImGuiSdl2, renderer::ImGuiFna3d},
+    imgui_backends::{
+        helper::QuickStart, platform::ImGuiSdl2, renderer::ImGuiFna3d, Platform, Renderer,
+    },
     sdl2::event::Event,
     std::time::Duration,
 };
@@ -112,7 +114,7 @@ pub fn main() -> Result<()> {
 
     let title = "SDL2 + FNA3D";
 
-    let mut init = Init::init(title, (W, H))?;
+    let mut handles = Init::init(title, (W, H))?;
 
     let mut backend = {
         let icx = QuickStart {
@@ -121,10 +123,10 @@ pub fn main() -> Result<()> {
             hidpi_factor: 1.0,
         }
         .create_context();
-        init.create_imgui_backend(icx)?
+        handles.create_imgui_backend(icx)?
     };
 
-    let mut pump = init.sdl.event_pump().map_err(Error::msg)?;
+    let mut pump = handles.sdl.event_pump().map_err(Error::msg)?;
 
     'running: loop {
         let dt = Duration::from_nanos(1_000_000_000 / 30);
@@ -135,26 +137,31 @@ pub fn main() -> Result<()> {
                 _ => {}
             }
 
-            backend.handle_event(&init.win, &ev);
+            backend
+                .platform
+                .handle_event(&mut backend.context, &handles.win, &ev);
 
-            init.device.clear(
+            handles.device.clear(
                 fna3d::ClearOptions::TARGET,
                 Color::rgb(120, 180, 140).to_vec4(),
                 0.0, // depth
                 0,   // stencil
             );
 
-            let ui = backend.frame(&init.win, &mut init.device);
+            backend
+                .platform
+                .prepare_frame(backend.context.io_mut(), &handles.win);
+            let ui = backend.context.frame();
 
             let mut b = true;
             ui.show_demo_window(&mut b);
 
-            // FIXME:
-            ui.render_with_backend().unwrap();
-            // ui.render_with_backend()?;
+            backend.platform.prepare_render(&ui, &handles.win);
+            backend.renderer.render(ui.render(), &mut handles.device)?;
 
-            init.device
-                .swap_buffers(None, None, init.raw_window() as *mut _);
+            handles
+                .device
+                .swap_buffers(None, None, handles.raw_window() as *mut _);
 
             // something like 30 FPS. do not use it for real applications
             std::thread::sleep(dt);
