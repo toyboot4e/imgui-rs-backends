@@ -3,7 +3,8 @@ ImGUI renderer implementation in FNA3D based on [the example]
 
 [the example]: https://github.com/Gekkio/imgui-rs/blob/master/imgui-gfx-renderer/src/lib.rs
 
-FIXME: It is a bad practice to use `raw_device` field because it may drop earlier than Device
+* FIXME: It is a bad practice to use `raw_device` field because it may drop earlier than Device
+* FIXME: Don't use batcher?
 */
 
 use {
@@ -73,6 +74,7 @@ impl RcTexture2d {
 pub struct ImGuiFna3d {
     textures: imgui::Textures<RcTexture2d>,
     font_texture: RcTexture2d,
+    // TODO: remove batch?
     batch: Batch,
 }
 
@@ -109,12 +111,10 @@ impl ImGuiFna3d {
             atlas_texture.height,
         );
 
-        // create GPU texture
         let raw = {
             let fmt = fna3d::SurfaceFormat::Color;
             let gpu_texture = device.create_texture_2d(fmt, w, h, 1, false);
             device.set_texture_data_2d(gpu_texture, 0, 0, w, h, 0, pixels);
-
             gpu_texture
         };
 
@@ -170,7 +170,6 @@ impl RendererImplUtil for ImGuiFna3d {
     }
 
     fn set_proj_mat(&mut self, draw_data: &DrawData) {
-        // set prjection matrix
         let mat = fna3d::mojo::orthographic_off_center(
             // left, right
             draw_data.display_pos[0],

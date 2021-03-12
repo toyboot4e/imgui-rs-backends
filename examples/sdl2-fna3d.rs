@@ -1,5 +1,5 @@
 /*
-SDL2 + Rust-FNA3D example
+SDL2 + Rust-FNA3D
 */
 
 use {

@@ -5,7 +5,7 @@ Helper
 use imgui::{FontConfig, FontSource};
 
 use {
-    imgui::{internal::RawWrapper,DrawData, DrawCmd, DrawCmdParams},
+    imgui::{internal::RawWrapper, DrawCmd, DrawCmdParams, DrawData},
     thiserror::Error,
 };
 
@@ -69,25 +69,46 @@ pub fn ortho_mat_gl(
         (2.0 / (right as f64 - left as f64)) as f32,
         0.0,
         0.0,
-        -((right as f64 + left as f64) / (right as f64 - left as f64)) as f32,
+        0.0,
         // ---
         0.0,
         (2.0 / (top as f64 - bottom as f64)) as f32,
         0.0,
-        -((top as f64 + bottom as f64) / (top as f64 - bottom as f64)) as f32,
+        0.0,
         // ---
         0.0,
         0.0,
         -(1.0 / (far as f64 - near as f64)) as f32,
-        (near as f64 / (near as f64 - far as f64)) as f32,
-        // -(2.0 / (far as f64 - near as f64)) as f32,
-        // -((far as f64 + near as f64) / (far as f64 - near as f64)) as f32,
+        0.0,
         // ---
-        0.0,
-        0.0,
-        0.0,
+        -((right as f64 + left as f64) / (right as f64 - left as f64)) as f32,
+        -((top as f64 + bottom as f64) / (top as f64 - bottom as f64)) as f32,
+        (near as f64 / (near as f64 - far as f64)) as f32,
         1.0,
     ]
+    // [
+    //     (2.0 / (right as f64 - left as f64)) as f32,
+    //     0.0,
+    //     0.0,
+    //     -((right as f64 + left as f64) / (right as f64 - left as f64)) as f32,
+    //     // ---
+    //     0.0,
+    //     (2.0 / (top as f64 - bottom as f64)) as f32,
+    //     0.0,
+    //     -((top as f64 + bottom as f64) / (top as f64 - bottom as f64)) as f32,
+    //     // ---
+    //     0.0,
+    //     0.0,
+    //     -(1.0 / (far as f64 - near as f64)) as f32,
+    //     (near as f64 / (near as f64 - far as f64)) as f32,
+    //     // -(2.0 / (far as f64 - near as f64)) as f32,
+    //     // -((far as f64 + near as f64) / (far as f64 - near as f64)) as f32,
+    //     // ---
+    //     0.0,
+    //     0.0,
+    //     0.0,
+    //     1.0,
+    // ]
 }
 
 // TODO: extend and use this error
@@ -100,13 +121,15 @@ pub enum ImGuiRendererError {
 /// Implement [`Renderer`] by implementing sub procedures
 pub trait RendererImplUtil: Renderer {
     /// Use pre-multiplied alpha on immediate-mode rendering API
-    fn before_render(&mut self,device:&mut <Self as Renderer>::Device)-> std::result::Result<(), <Self as Renderer>::Error> {
+    fn before_render(
+        &mut self,
+        device: &mut <Self as Renderer>::Device,
+    ) -> std::result::Result<(), <Self as Renderer>::Error> {
         Ok(())
     }
     /// Revert the blending mode on immediate-mode rendering API
-    fn after_render(&mut self,device:&mut <Self as Renderer>::Device){
-    }
-    fn set_proj_mat(&mut self, draw_data:&DrawData) ;
+    fn after_render(&mut self, device: &mut <Self as Renderer>::Device) {}
+    fn set_proj_mat(&mut self, draw_data: &DrawData);
     fn set_draw_list(&mut self, draw_list: &imgui::DrawList, device: &<Self as Renderer>::Device);
     fn draw(
         &mut self,
