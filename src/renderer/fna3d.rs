@@ -202,7 +202,7 @@ impl RendererImplUtil for ImGuiFna3d {
         n_elems: usize,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
         let DrawCmdParams {
-            clip_rect,
+            clip_rect: _,
             texture_id,
             vtx_offset,
             idx_offset,
@@ -298,6 +298,7 @@ impl Batch {
             vertex_sampler_state_changes: std::ptr::null(),
         };
         let pass = 0;
+        // TODO: implement default in rust-fna3d
         device.apply_effect(self.effect, pass, &state_changes);
 
         // set texture

@@ -3,7 +3,6 @@
 */
 
 use {
-    anyhow::{Context, Error},
     imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
     rokol::gfx::{self as rg, BakedResource},
     thiserror::Error,
@@ -19,9 +18,6 @@ const N_QUADS: usize = 2048;
 
 /// Size of a vertex in bytes
 const VERT_SIZE: usize = 20;
-
-/// Size of an index in bytes
-const INDEX_SIZE: usize = 2;
 
 // TODO: extend and use this error
 #[derive(Debug, Error)]
@@ -176,6 +172,7 @@ fn create_bindings() -> rg::Bindings {
             xs
         },
         index_buffer: rg::Buffer::create(&rg::ibuf_desc_dyn(
+            // NOTE: ImGUI uses 16 bits index
             2 * N_QUADS * 6,
             rg::ResourceUsage::Stream,
             "",
@@ -262,8 +259,10 @@ impl RendererImplUtil for ImGuiRokolGfx {
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
         self.binds.vertex_buffer_offsets[0] = 0;
         self.binds.index_buffer_offset = 0;
+
         rg::begin_default_pass(&rg::PassAction::LOAD, 1280, 720);
         self.shd.apply_pip();
+
         Ok(())
     }
 
@@ -291,11 +290,10 @@ impl RendererImplUtil for ImGuiRokolGfx {
     }
 
     fn set_draw_list(&mut self, draw_list: &imgui::DrawList, _device: &<Self as Renderer>::Device) {
-        // upload all vertices at once
-        unsafe {
-            rg::update_buffer(self.binds.vertex_buffers[0], draw_list.vtx_buffer());
-            rg::update_buffer(self.binds.index_buffer, draw_list.idx_buffer());
-        }
+        // self.binds.vertex_buffer_offsets[0] =
+        rg::append_buffer(self.binds.vertex_buffers[0], draw_list.vtx_buffer());
+        // self.binds.index_buffer_offset =
+        rg::append_buffer(self.binds.index_buffer, draw_list.idx_buffer());
     }
 
     fn draw(
@@ -304,14 +302,8 @@ impl RendererImplUtil for ImGuiRokolGfx {
         params: &DrawCmdParams,
         n_elems: usize,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        self.binds.vertex_buffer_offsets[0] = params.vtx_offset as i32;
-        // self.binds.index_buffer_offset = params.idx_offset as i32;
-
         rg::apply_bindings(&self.binds);
-
-        // rg::draw(draw_params.vtx_offset as u32, n_elems as u32, 1);
-        rg::draw(0, n_elems as u32, 1);
-
+        rg::draw(params.idx_offset as u32, n_elems as u32, 1);
         Ok(())
     }
 }
