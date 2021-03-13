@@ -1,0 +1,23 @@
+[package]
+name = "imgui-backends"
+version = "0.1.0"
+authors = ["toyboot4e <toyboot4e@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+imgui = "0.7.0"
+
+# platform
+sdl2 = "0.34.3"
+winit = "0.24.0"
+
+# renderer
+fna3d = "0.1.5"
+rokol = { git = "https://github.com/toyboot4e/rokol", rev = "2fcc5ed", features = ["impl-app", "impl-gfx", "glcore33", "use-sdl2"] }
+
+# example
+anyhow = "1.0.38"
+log = "0.4.14"
+env_logger = "0.8.3"
+thiserror = "1.0.24"
+glow = "0.8.1"

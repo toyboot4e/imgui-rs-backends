@@ -5,6 +5,10 @@ Backend for [`imgui-rs`]
 
 [`imgui-rs`] backends are made of platform + renderer. `imgui-backend` separates and combines them
 so that any combination is allowed.
+
+# Considerations
+
+* Traits don't actually work well.
 */
 
 pub mod helper;

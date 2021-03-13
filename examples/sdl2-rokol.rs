@@ -3,8 +3,10 @@ SDL2 + Rokol (graphics)
 */
 
 use {
-    anyhow::{Error, Context, Result},
-    imgui_backends::{helper::QuickStart,Renderer,Platform, platform::ImGuiSdl2, renderer::ImGuiRokolGfx},
+    anyhow::{Error, Result},
+    imgui_backends::{
+        helper::QuickStart, platform::ImGuiSdl2, renderer::ImGuiRokolGfx, Platform, Renderer,
+    },
     rokol::gfx as rg,
     sdl2::event::Event,
     std::time::Duration,
@@ -60,7 +62,9 @@ fn main() -> Result<()> {
                 _ => {}
             }
 
-            backend.platform.handle_event(&mut backend.context, &handles.win, &ev);
+            backend
+                .platform
+                .handle_event(&mut backend.context, &handles.win, &ev);
 
             // FIXME: Can it be cheaper? This is just clearing the screen.
             rg::begin_default_pass(&pa, 1280, 720);
@@ -68,7 +72,9 @@ fn main() -> Result<()> {
 
             // ----------
             let mut dummy_device = ();
-            backend.platform.prepare_frame(backend.context.io_mut(), &handles.win);
+            backend
+                .platform
+                .prepare_frame(backend.context.io_mut(), &handles.win);
             let ui = backend.context.frame();
 
             // use imgui here
@@ -76,7 +82,7 @@ fn main() -> Result<()> {
             ui.show_demo_window(&mut b);
 
             backend.platform.prepare_render(&ui, &handles.win);
-            backend.renderer.render(ui.render(),&mut dummy_device)?;
+            backend.renderer.render(ui.render(), &mut dummy_device)?;
             // ----------
 
             // swap buffer

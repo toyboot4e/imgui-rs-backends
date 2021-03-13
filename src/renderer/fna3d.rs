@@ -8,7 +8,7 @@ ImGUI renderer implementation in FNA3D based on [the example]
 */
 
 use {
-    imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
+    imgui::{im_str, DrawCmdParams, DrawData},
     std::{mem::size_of, rc::Rc},
     thiserror::Error,
 };
@@ -88,11 +88,11 @@ impl ImGuiFna3d {
 
         icx.io_mut()
             .backend_flags
-            .insert(BackendFlags::RENDERER_HAS_VTX_OFFSET);
+            .insert(imgui::BackendFlags::RENDERER_HAS_VTX_OFFSET);
 
         let font_texture = Self::load_font_texture(device, icx.fonts())?;
 
-        Ok(ImGuiFna3d {
+        Ok(Self {
             textures: imgui::Textures::new(),
             font_texture,
             batch: Batch::new(device.clone()),
