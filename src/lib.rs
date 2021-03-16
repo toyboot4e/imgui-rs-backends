@@ -16,11 +16,12 @@ pub mod platform;
 pub mod renderer;
 
 use imgui::{Context, Io, Ui};
+use std::ops::{Deref, DerefMut};
 
 /// Half of an `imgui-rs` backend
 pub trait Platform {
     type Event;
-    /// Dependency for setti
+    /// Dependency
     type Window;
     /// Return if the event is captured by ImGUI
     fn handle_event(
@@ -57,4 +58,86 @@ where
     pub context: imgui::Context,
     pub platform: P,
     pub renderer: R,
+}
+
+impl<P, R> Backend<P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    pub fn handle_event(&mut self, window: &mut P::Window, event: &P::Event) {
+        self.platform.handle_event(&mut self.context, window, event);
+    }
+
+    pub fn begin_frame<'a>(&'a mut self, window: &P::Window) -> BackendUi<'a, P, R> {
+        self.platform.prepare_frame(self.context.io_mut(), window);
+        BackendUi {
+            ui: self.context.frame(),
+            platform: &mut self.platform,
+            renderer: &mut self.renderer,
+        }
+    }
+}
+
+pub struct BackendUi<'a, P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    ui: imgui::Ui<'a>,
+    platform: &'a mut P,
+    renderer: &'a mut R,
+}
+
+impl<'a, P, R> Deref for BackendUi<'a, P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    type Target = imgui::Ui<'a>;
+    fn deref(&self) -> &Self::Target {
+        &self.ui
+    }
+}
+
+impl<'a, P, R> DerefMut for BackendUi<'a, P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ui
+    }
+}
+
+impl<'a, P, R> AsRef<imgui::Ui<'a>> for BackendUi<'a, P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    fn as_ref(&self) -> &imgui::Ui<'a> {
+        &self.ui
+    }
+}
+
+impl<'a, P, R> AsMut<imgui::Ui<'a>> for BackendUi<'a, P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    fn as_mut(&mut self) -> &mut imgui::Ui<'a> {
+        &mut self.ui
+    }
+}
+
+impl<'a, P, R> BackendUi<'a, P, R>
+where
+    P: Platform,
+    R: Renderer,
+{
+    pub fn end_frame(self, window: &mut P::Window, device: &mut R::Device) -> Result<(), R::Error> {
+        self.platform.prepare_render(&self.ui, window);
+        self.renderer.render(self.ui.render(), device)?;
+        Ok(())
+    }
 }

@@ -21,7 +21,7 @@ const H: u32 = 720;
 pub struct Init {
     pub sdl: sdl2::Sdl,
     pub vid: sdl2::VideoSubsystem,
-    pub win: sdl2::video::Window,
+    pub window: sdl2::video::Window,
     pub params: fna3d::PresentationParameters,
     pub device: fna3d::Device,
 }
@@ -29,7 +29,7 @@ pub struct Init {
 impl Init {
     /// Use it when calling [`fna3d::Device::swap_buffers`]
     pub fn raw_window(&self) -> *mut sdl2::sys::SDL_Window {
-        self.win.raw()
+        self.window.raw()
     }
 
     /// Initializes the FNA3D device and the SDL2 window, wrapping them to an [`Init`] struct
@@ -89,7 +89,7 @@ impl Init {
         Ok(Init {
             sdl,
             vid,
-            win,
+            window: win,
             params,
             device,
         })
@@ -98,7 +98,7 @@ impl Init {
 
 impl Init {
     pub fn create_imgui_backend(&mut self, mut icx: imgui::Context) -> Result<Backend> {
-        let platform = ImGuiSdl2::new(&mut icx, &self.win);
+        let platform = ImGuiSdl2::new(&mut icx, &self.window);
         let renderer = ImGuiFna3d::init(&mut icx, &self.device)?;
 
         Ok(Backend {
@@ -137,9 +137,7 @@ pub fn main() -> Result<()> {
                 _ => {}
             }
 
-            backend
-                .platform
-                .handle_event(&mut backend.context, &handles.win, &ev);
+            backend.handle_event(&mut handles.window, &ev);
 
             handles.device.clear(
                 fna3d::ClearOptions::TARGET,
@@ -148,16 +146,12 @@ pub fn main() -> Result<()> {
                 0,   // stencil
             );
 
-            backend
-                .platform
-                .prepare_frame(backend.context.io_mut(), &handles.win);
-            let ui = backend.context.frame();
+            let ui = backend.begin_frame(&handles.window);
 
             let mut b = true;
             ui.show_demo_window(&mut b);
 
-            backend.platform.prepare_render(&ui, &handles.win);
-            backend.renderer.render(ui.render(), &mut handles.device)?;
+            ui.end_frame(&mut handles.window, &mut handles.device)?;
 
             handles
                 .device
