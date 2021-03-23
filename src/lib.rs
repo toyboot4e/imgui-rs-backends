@@ -3,12 +3,12 @@ Backend for [`imgui-rs`]
 
 [`imgui-rs`]: https://github.com/Gekkio/imgui-rs
 
-[`imgui-rs`] backends are made of platform + renderer. `imgui-backend` separates and combines them
+[`imgui-rs`] backends are made of platform and renderer. `imgui-backend` separates and combines them
 so that any combination is allowed.
 
-# Considerations
+See [`examples`] to get started.
 
-* Traits don't actually work well.
+[`examples`]: https://github.com/toyboot4e/imgui-rs-backends
 */
 
 pub mod helper;
@@ -49,13 +49,13 @@ pub trait Renderer {
     ) -> std::result::Result<(), Self::Error>;
 }
 
-/// `imgui-rs` backend
+/// `imgui-rs` backend = `imgui::Context` + `Platform` + `Renderer`
 pub struct Backend<P, R>
 where
     P: Platform,
     R: Renderer,
 {
-    pub context: imgui::Context,
+    pub imgui: imgui::Context,
     pub platform: P,
     pub renderer: R,
 }
@@ -65,14 +65,15 @@ where
     P: Platform,
     R: Renderer,
 {
-    pub fn handle_event(&mut self, window: &mut P::Window, event: &P::Event) {
-        self.platform.handle_event(&mut self.context, window, event);
+    pub fn handle_event(&mut self, window: &P::Window, event: &P::Event) {
+        self.platform.handle_event(&mut self.imgui, window, event);
     }
 
+    /// TODO: set dt?
     pub fn begin_frame<'a>(&'a mut self, window: &P::Window) -> BackendUi<'a, P, R> {
-        self.platform.prepare_frame(self.context.io_mut(), window);
+        self.platform.prepare_frame(self.imgui.io_mut(), window);
         BackendUi {
-            ui: self.context.frame(),
+            ui: self.imgui.frame(),
             platform: &mut self.platform,
             renderer: &mut self.renderer,
         }

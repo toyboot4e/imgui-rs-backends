@@ -80,17 +80,18 @@ pub struct ImGuiFna3d {
 
 impl ImGuiFna3d {
     /// Add font before loading
-    pub fn init(icx: &mut imgui::Context, device: &fna3d::Device) -> Result<Self> {
-        icx.set_renderer_name(Some(im_str!(
+    pub fn init(imgui: &mut imgui::Context, device: &fna3d::Device) -> Result<Self> {
+        imgui.set_renderer_name(Some(im_str!(
             "imgui-fna3d-renderer {}",
             env!("CARGO_PKG_VERSION")
         )));
 
-        icx.io_mut()
+        imgui
+            .io_mut()
             .backend_flags
             .insert(imgui::BackendFlags::RENDERER_HAS_VTX_OFFSET);
 
-        let font_texture = Self::load_font_texture(device, icx.fonts())?;
+        let font_texture = Self::load_font_texture(device, imgui.fonts())?;
 
         Ok(Self {
             textures: imgui::Textures::new(),
@@ -169,7 +170,7 @@ impl RendererImplUtil for ImGuiFna3d {
         //
     }
 
-    fn set_proj_mat(&mut self, draw_data: &DrawData) {
+    fn set_proj_mat(&mut self, _device: &mut <Self as Renderer>::Device, draw_data: &DrawData) {
         let mat = fna3d::mojo::orthographic_off_center(
             // left, right
             draw_data.display_pos[0],
@@ -191,13 +192,17 @@ impl RendererImplUtil for ImGuiFna3d {
         }
     }
 
-    fn set_draw_list(&mut self, draw_list: &imgui::DrawList, device: &<Self as Renderer>::Device) {
-        self.batch.set_draw_list(draw_list, device);
+    fn set_draw_list(
+        &mut self,
+        device: &mut <Self as Renderer>::Device,
+        draw_list: &imgui::DrawList,
+    ) {
+        self.batch.set_draw_list(device, draw_list);
     }
 
     fn draw(
         &mut self,
-        device: &<Self as Renderer>::Device,
+        device: &mut <Self as Renderer>::Device,
         draw_params: &DrawCmdParams,
         n_elems: usize,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
@@ -276,7 +281,7 @@ impl Batch {
         }
     }
 
-    fn set_draw_list(&mut self, draw_list: &imgui::DrawList, device: &fna3d::Device) {
+    fn set_draw_list(&mut self, device: &fna3d::Device, draw_list: &imgui::DrawList) {
         self.vbuf.upload_vertices(&draw_list.vtx_buffer(), device);
         self.ibuf.upload_indices(&draw_list.idx_buffer(), device);
     }

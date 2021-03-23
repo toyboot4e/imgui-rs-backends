@@ -190,17 +190,18 @@ pub struct ImGuiRokolGfx {
 }
 
 impl ImGuiRokolGfx {
-    pub fn new(icx: &mut imgui::Context) -> Result<Self, ImGuiRendererError> {
-        icx.set_renderer_name(Some(im_str!(
+    pub fn new(imgui: &mut imgui::Context) -> Result<Self, ImGuiRendererError> {
+        imgui.set_renderer_name(Some(im_str!(
             "imgui-rokol-renderer {}",
             env!("CARGO_PKG_VERSION")
         )));
 
-        icx.io_mut()
+        imgui
+            .io_mut()
             .backend_flags
             .insert(BackendFlags::RENDERER_HAS_VTX_OFFSET);
 
-        let font_texture = Self::load_font_texture(icx.fonts())?;
+        let font_texture = Self::load_font_texture(imgui.fonts())?;
         let shd = self::create_shader();
         let mut binds = self::create_bindings();
         binds.fs_images[0] = font_texture.img;
@@ -270,7 +271,7 @@ impl RendererImplUtil for ImGuiRokolGfx {
         rg::end_pass();
     }
 
-    fn set_proj_mat(&mut self, draw_data: &DrawData) {
+    fn set_proj_mat(&mut self, _device: &mut <Self as Renderer>::Device, draw_data: &DrawData) {
         let mat = crate::helper::ortho_mat_gl(
             // left, right
             draw_data.display_pos[0],
@@ -289,16 +290,18 @@ impl RendererImplUtil for ImGuiRokolGfx {
         self.shd.set_vs_uniform(0, bytes);
     }
 
-    fn set_draw_list(&mut self, draw_list: &imgui::DrawList, _device: &<Self as Renderer>::Device) {
-        // self.binds.vertex_buffer_offsets[0] =
+    fn set_draw_list(
+        &mut self,
+        _device: &mut <Self as Renderer>::Device,
+        draw_list: &imgui::DrawList,
+    ) {
         rg::append_buffer(self.binds.vertex_buffers[0], draw_list.vtx_buffer());
-        // self.binds.index_buffer_offset =
         rg::append_buffer(self.binds.index_buffer, draw_list.idx_buffer());
     }
 
     fn draw(
         &mut self,
-        _device: &<Self as Renderer>::Device,
+        _device: &mut <Self as Renderer>::Device,
         params: &DrawCmdParams,
         n_elems: usize,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {

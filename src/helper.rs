@@ -26,14 +26,14 @@ impl QuickStart {
     /// Based on: <https://github.com/Gekkio/imgui-rs/blob/master/imgui-examples/examples/support/mod.rs>
     pub fn create_context(&self) -> imgui::Context {
         // ImGUI context
-        let mut icx = imgui::Context::create();
+        let mut imgui = imgui::Context::create();
 
         // initial window settings
-        icx.io_mut().display_size = self.display_size;
+        imgui.io_mut().display_size = self.display_size;
 
         // initial font settings
         let font_size = (self.fontsize * self.hidpi_factor) as f32;
-        icx.fonts().add_font(&[
+        imgui.fonts().add_font(&[
             FontSource::DefaultFontData {
                 config: Some(FontConfig {
                     size_pixels: font_size,
@@ -50,9 +50,9 @@ impl QuickStart {
                 }),
             },
         ]);
-        icx.io_mut().font_global_scale = (1.0 / self.hidpi_factor) as f32;
+        imgui.io_mut().font_global_scale = (1.0 / self.hidpi_factor) as f32;
 
-        icx
+        imgui
     }
 }
 
@@ -106,11 +106,15 @@ pub trait RendererImplUtil: Renderer {
     }
     /// Revert the blending mode on immediate-mode rendering API
     fn after_render(&mut self, _device: &mut <Self as Renderer>::Device) {}
-    fn set_proj_mat(&mut self, draw_data: &DrawData);
-    fn set_draw_list(&mut self, draw_list: &imgui::DrawList, device: &<Self as Renderer>::Device);
+    fn set_proj_mat(&mut self, device: &mut <Self as Renderer>::Device, draw_data: &DrawData);
+    fn set_draw_list(
+        &mut self,
+        device: &mut <Self as Renderer>::Device,
+        draw_list: &imgui::DrawList,
+    );
     fn draw(
         &mut self,
-        device: &<Self as Renderer>::Device,
+        device: &mut <Self as Renderer>::Device,
         // clip_rect: &[f32; 4],
         draw_params: &DrawCmdParams,
         n_elems: usize,
@@ -140,13 +144,13 @@ fn render_impl<T: RendererImplUtil>(
         return Ok(());
     }
 
-    renderer.set_proj_mat(&draw_data);
+    renderer.set_proj_mat(device, &draw_data);
 
     let clip_off = draw_data.display_pos;
     let clip_scale = draw_data.framebuffer_scale;
 
     for draw_list in draw_data.draw_lists() {
-        renderer.set_draw_list(draw_list, device);
+        renderer.set_draw_list(device, draw_list);
 
         for cmd in draw_list.commands() {
             match cmd {
