@@ -130,6 +130,7 @@ pub fn main() -> Result<()> {
 
     'running: loop {
         let dt = Duration::from_nanos(1_000_000_000 / 30);
+        // TODO: set dt for ImGUI
 
         for ev in pump.poll_iter() {
             match ev {
@@ -148,10 +149,8 @@ pub fn main() -> Result<()> {
         );
 
         let ui = backend.begin_frame(&handles.window);
-
         let mut b = true;
         ui.show_demo_window(&mut b);
-
         ui.end_frame(&mut handles.window, &mut handles.device)?;
 
         handles

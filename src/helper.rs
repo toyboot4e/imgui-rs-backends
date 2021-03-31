@@ -1,11 +1,13 @@
 /*!
 Helper
+
+TODO: Replace it with an iterator (DrawCalls::pull)
 */
 
 use imgui::{FontConfig, FontSource};
 
 use {
-    imgui::{internal::RawWrapper, DrawCmd, DrawCmdParams, DrawData},
+    imgui::{internal::RawWrapper, DrawCmd},
     thiserror::Error,
 };
 
@@ -95,6 +97,72 @@ pub enum ImGuiRendererError {
     BadTexture(imgui::TextureId),
 }
 
+/// Rectangle
+///
+/// # Coordinate system
+/// ```md
+///     y
+///     ^
+///     |
+/// ----+---> x
+///     |
+///     |
+/// ```
+#[derive(Debug, Clone)]
+pub struct Rect {
+    left: f32,
+    up: f32,
+    right: f32,
+    down: f32,
+}
+
+impl Rect {
+    pub fn left(&self) -> f32 {
+        self.left
+    }
+
+    pub fn up(&self) -> f32 {
+        self.up
+    }
+
+    pub fn right(&self) -> f32 {
+        self.right
+    }
+
+    pub fn down(&self) -> f32 {
+        self.down
+    }
+
+    pub fn width(&self) -> f32 {
+        self.right - self.left
+    }
+
+    pub fn height(&self) -> f32 {
+        self.down - self.up
+    }
+}
+
+/// Context and parameters for a draw call; extentended [`imgui::DrawCmdParams`]
+#[derive(Debug, Clone)]
+pub struct DrawParams<'a> {
+    /// Display [`Rect`] for orthographic projection matrix
+    pub display: Rect,
+    /// Vertex buffer
+    pub vtx_buffer: &'a [imgui::DrawVert],
+    /// Vertex offset for this draw cal
+    pub vtx_offset: usize,
+    /// Index buffer
+    pub idx_buffer: &'a [imgui::DrawIdx],
+    /// Index offset for this draw cal
+    pub idx_offset: usize,
+    /// Number of triangles for this draw call: `n_elems` = `vbuf_span.len` `4` = `ibuf.len` / `6`
+    pub n_elems: usize,
+    /// Texture ID for this draw call
+    pub tex_id: imgui::TextureId,
+    /// Scissor rectangle
+    pub scissor: Rect,
+}
+
 /// Implement [`Renderer`] by implementing sub procedures
 pub trait RendererImplUtil: Renderer {
     /// Use pre-multiplied alpha on immediate-mode rendering API
@@ -104,21 +172,14 @@ pub trait RendererImplUtil: Renderer {
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
         Ok(())
     }
+    /// Issue a draw call
+    fn draw<'a>(
+        &mut self,
+        device: &mut <Self as Renderer>::Device,
+        params: &'a DrawParams,
+    ) -> std::result::Result<(), <Self as Renderer>::Error>;
     /// Revert the blending mode on immediate-mode rendering API
     fn after_render(&mut self, _device: &mut <Self as Renderer>::Device) {}
-    fn set_proj_mat(&mut self, device: &mut <Self as Renderer>::Device, draw_data: &DrawData);
-    fn set_draw_list(
-        &mut self,
-        device: &mut <Self as Renderer>::Device,
-        draw_list: &imgui::DrawList,
-    );
-    fn draw(
-        &mut self,
-        device: &mut <Self as Renderer>::Device,
-        // clip_rect: &[f32; 4],
-        draw_params: &DrawCmdParams,
-        n_elems: usize,
-    ) -> std::result::Result<(), <Self as Renderer>::Error>;
 }
 
 pub fn render<T: RendererImplUtil>(
@@ -137,6 +198,7 @@ fn render_impl<T: RendererImplUtil>(
     draw_data: &imgui::DrawData,
     device: &mut <T as Renderer>::Device,
 ) -> std::result::Result<(), <T as Renderer>::Error> {
+    // framebuffer size
     let fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
     let fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
 
@@ -144,14 +206,17 @@ fn render_impl<T: RendererImplUtil>(
         return Ok(());
     }
 
-    renderer.set_proj_mat(device, &draw_data);
-
     let clip_off = draw_data.display_pos;
     let clip_scale = draw_data.framebuffer_scale;
 
-    for draw_list in draw_data.draw_lists() {
-        renderer.set_draw_list(device, draw_list);
+    let display_rect = Rect {
+        left: draw_data.display_pos[0],
+        right: draw_data.display_pos[0] + draw_data.display_size[0],
+        up: draw_data.display_pos[1] + draw_data.display_size[1],
+        down: draw_data.display_pos[1],
+    };
 
+    for draw_list in draw_data.draw_lists() {
         for cmd in draw_list.commands() {
             match cmd {
                 DrawCmd::Elements { count, cmd_params } => {
@@ -165,7 +230,6 @@ fn render_impl<T: RendererImplUtil>(
                         (clip_rect[3] - clip_off[1]) * clip_scale[1],
                     ];
 
-                    // FIXME: this clipping is not always correct?
                     if clip_rect[0] >= fb_width
                         || clip_rect[1] >= fb_height
                         || clip_rect[2] < 0.0
@@ -173,14 +237,35 @@ fn render_impl<T: RendererImplUtil>(
                     {
                         // skip
                     } else {
-                        // renderer.draw(device, &clip_rect, &cmd_params, count)?;
-                        renderer.draw(device, &cmd_params, count)?;
+                        // [left, up, right, bottom]
+                        let [x, y, z, w] = cmd_params.clip_rect;
+                        let scissor = Rect {
+                            left: x * clip_scale[0],
+                            up: fb_height - w * clip_scale[1],
+                            right: (z - x) * clip_scale[0],
+                            down: (w - y) * clip_scale[1],
+                        };
+
+                        let params = DrawParams {
+                            display: display_rect.clone(),
+                            vtx_buffer: draw_list.vtx_buffer(),
+                            vtx_offset: cmd_params.vtx_offset,
+                            idx_buffer: draw_list.idx_buffer(),
+                            idx_offset: cmd_params.idx_offset,
+                            n_elems: count,
+                            tex_id: cmd_params.texture_id,
+                            scissor,
+                        };
+
+                        // TODO: with matrix inforation and texture
+                        renderer.draw(device, &params)?;
                     }
                 }
                 DrawCmd::ResetRenderState => {
-                    log::warn!("imgui-backends fna3d: ResetRenderState not implemented");
+                    log::warn!("imgui-backends: ResetRenderState is not implemented");
                 }
                 DrawCmd::RawCallback { callback, raw_cmd } => unsafe {
+                    log::warn!("imgui-backends: RawCallback is not implemented");
                     callback(draw_list.raw(), raw_cmd)
                 },
             }

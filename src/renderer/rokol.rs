@@ -3,18 +3,21 @@
 */
 
 use {
-    imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
+    imgui::{im_str, BackendFlags},
     rokol::gfx::{self as rg, BakedResource},
     thiserror::Error,
 };
 
-use crate::{helper::RendererImplUtil, Renderer};
+use crate::{
+    helper::{DrawParams, RendererImplUtil},
+    Renderer,
+};
 
 /// `mplus-1p-regular.ttf`
 pub const JP_FONT: &[u8] = include_bytes!("../../assets/mplus-1p-regular.ttf");
 
 /// Number of quadliterals
-const N_QUADS: usize = 2048;
+const N_QUADS: usize = 8192;
 
 /// Size of a vertex in bytes
 const VERT_SIZE: usize = 20;
@@ -256,7 +259,7 @@ impl Renderer for ImGuiRokolGfx {
 impl RendererImplUtil for ImGuiRokolGfx {
     fn before_render(
         &mut self,
-        _device: &mut <Self as Renderer>::Device,
+        _dummy_device: &mut <Self as Renderer>::Device,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
         self.binds.vertex_buffer_offsets[0] = 0;
         self.binds.index_buffer_offset = 0;
@@ -271,42 +274,52 @@ impl RendererImplUtil for ImGuiRokolGfx {
         rg::end_pass();
     }
 
-    fn set_proj_mat(&mut self, _device: &mut <Self as Renderer>::Device, draw_data: &DrawData) {
-        let mat = crate::helper::ortho_mat_gl(
-            // left, right
-            draw_data.display_pos[0],
-            draw_data.display_pos[0] + draw_data.display_size[0],
-            // bottom, top
-            draw_data.display_pos[1] + draw_data.display_size[1],
-            draw_data.display_pos[1],
-            // near, far
-            1.0,
-            0.0,
-        );
-
-        let bytes = unsafe {
-            std::slice::from_raw_parts(mat.as_ptr() as *const _, std::mem::size_of::<[f32; 16]>())
-        };
-        self.shd.set_vs_uniform(0, bytes);
-    }
-
-    fn set_draw_list(
+    fn draw<'a>(
         &mut self,
-        _device: &mut <Self as Renderer>::Device,
-        draw_list: &imgui::DrawList,
-    ) {
-        rg::append_buffer(self.binds.vertex_buffers[0], draw_list.vtx_buffer());
-        rg::append_buffer(self.binds.index_buffer, draw_list.idx_buffer());
-    }
-
-    fn draw(
-        &mut self,
-        _device: &mut <Self as Renderer>::Device,
-        params: &DrawCmdParams,
-        n_elems: usize,
+        _dummy_device: &mut <Self as Renderer>::Device,
+        params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
+        if params.vtx_offset == 0 {
+            // 1. append buffers
+            rg::append_buffer(self.binds.vertex_buffers[0], params.vtx_buffer);
+            rg::append_buffer(self.binds.index_buffer, params.idx_buffer);
+
+            // 2. set orthographic projection matrix
+            let mat = crate::helper::ortho_mat_gl(
+                // left, right
+                params.display.left(),
+                params.display.right(),
+                // bottom, top
+                params.display.up(),
+                params.display.down(),
+                // near, far
+                0.0,
+                1.0,
+            );
+
+            let bytes = unsafe {
+                std::slice::from_raw_parts(
+                    mat.as_ptr() as *const _,
+                    std::mem::size_of::<[f32; 16]>(),
+                )
+            };
+            self.shd.set_vs_uniform(0, bytes);
+        }
+
+        // 1. scissor
+        // // FIXME: crash
+        // rg::scissor_f(
+        //     scissor.left(),
+        //     scissor.up(),
+        //     scissor.width(),
+        //     scissor.height(),
+        // );
+
+        // FIXME: 2. set texture
+
+        // 3. draw
         rg::apply_bindings(&self.binds);
-        rg::draw(params.idx_offset as u32, n_elems as u32, 1);
+        rg::draw(params.idx_offset as u32, params.n_elems as u32, 1);
         Ok(())
     }
 }

@@ -8,12 +8,15 @@ ImGUI renderer implementation in FNA3D based on [the example]
 */
 
 use {
-    imgui::{im_str, DrawCmdParams, DrawData},
+    imgui::im_str,
     std::{mem::size_of, rc::Rc},
     thiserror::Error,
 };
 
-use crate::{helper::RendererImplUtil, Renderer};
+use crate::{
+    helper::{DrawParams, RendererImplUtil},
+    Renderer,
+};
 
 /// `SpriteEffect.fxb`
 pub const SHADER: &[u8] = include_bytes!("fna3d/SpriteEffect.fxb");
@@ -21,8 +24,8 @@ pub const SHADER: &[u8] = include_bytes!("fna3d/SpriteEffect.fxb");
 /// `mplus-1p-regular.ttf`
 pub const JP_FONT: &[u8] = include_bytes!("../../assets/mplus-1p-regular.ttf");
 
-/// Number of quadliterals
-const N_QUADS: usize = 2048;
+/// Fixed number of quadliterals, used for allocating buffers
+pub const N_QUADS: usize = 8192;
 
 /// Size of a vertex in bytes
 const VERT_SIZE: usize = 20;
@@ -170,70 +173,70 @@ impl RendererImplUtil for ImGuiFna3d {
         //
     }
 
-    fn set_proj_mat(&mut self, _device: &mut <Self as Renderer>::Device, draw_data: &DrawData) {
-        let mat = fna3d::mojo::orthographic_off_center(
-            // left, right
-            draw_data.display_pos[0],
-            draw_data.display_pos[0] + draw_data.display_size[0],
-            // bottom, top
-            draw_data.display_pos[1] + draw_data.display_size[1],
-            draw_data.display_pos[1],
-            // near, far
-            1.0,
-            0.0,
-        );
+    fn draw<'a>(
+        &mut self,
+        device: &mut <Self as Renderer>::Device,
+        params: &'a DrawParams,
+    ) -> std::result::Result<(), <Self as Renderer>::Error> {
+        if params.vtx_offset == 0 {
+            // 1. append buffers
+            self.batch
+                .set_buffers(device, params.vtx_buffer, params.idx_buffer);
 
-        unsafe {
-            let name = "MatrixTransform";
-            let name = std::ffi::CString::new(name).unwrap();
-            if !fna3d::mojo::set_param(self.batch.effect_data, &name, &mat) {
-                log::warn!("failed to set projection matrix in FNA3D ImGUI renderer");
+            // 2. set orthographic projection matrix
+            let mat = fna3d::mojo::orthographic_off_center(
+                // left, right
+                params.display.left(),
+                params.display.right(),
+                // bottom, top
+                params.display.up(),
+                params.display.down(),
+                // near, far
+                0.0,
+                1.0,
+            );
+
+            unsafe {
+                let name = "MatrixTransform";
+                let name = std::ffi::CString::new(name).unwrap();
+                if !fna3d::mojo::set_param(self.batch.effect_data, &name, &mat) {
+                    log::warn!("failed to set projection matrix in FNA3D ImGUI renderer");
+                }
             }
         }
-    }
 
-    fn set_draw_list(
-        &mut self,
-        device: &mut <Self as Renderer>::Device,
-        draw_list: &imgui::DrawList,
-    ) {
-        self.batch.set_draw_list(device, draw_list);
-    }
+        // 1. scissor
+        device.set_scissor_rect(&fna3d::Rect {
+            x: params.scissor.left() as i32,
+            y: params.scissor.up() as i32,
+            w: params.scissor.width() as i32,
+            h: params.scissor.height() as i32,
+        });
 
-    fn draw(
-        &mut self,
-        device: &mut <Self as Renderer>::Device,
-        draw_params: &DrawCmdParams,
-        n_elems: usize,
-    ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        let DrawCmdParams {
-            clip_rect: _,
-            texture_id,
-            vtx_offset,
-            idx_offset,
-        } = draw_params;
-
-        let texture = if texture_id.id() == usize::MAX {
+        // 2. set texture
+        let tex_id = params.tex_id;
+        let texture = if tex_id.id() == usize::MAX {
             &self.font_texture
         } else {
             self.textures
-                .get(*texture_id)
-                .ok_or_else(|| ImGuiRendererError::BadTexture(*texture_id))?
+                .get(tex_id)
+                .ok_or_else(|| ImGuiRendererError::BadTexture(tex_id))?
         };
 
         self.batch
-            .prepare_draw(device, texture.texture.raw, *vtx_offset as u32);
+            .prepare_draw(device, texture.texture.raw, params.vtx_offset as u32);
 
-        let n_vertices = n_elems as u32 * 2 / 3; // n_verts : n_idx = 4 : 6
-        let n_primitives = n_elems / 3;
+        // 3. draw
+        let n_vertices = params.n_elems as u32 * 2 / 3; // n_verts : n_idx = 4 : 6
+        let n_triangles = params.n_elems / 3;
 
         device.draw_indexed_primitives(
             fna3d::PrimitiveType::TriangleList,
-            *vtx_offset as u32,
+            params.vtx_offset as u32,
             0,
             n_vertices,
-            *idx_offset as u32,
-            n_primitives as u32,
+            params.idx_offset as u32,
+            n_triangles as u32,
             self.batch.ibuf.buf,
             fna3d::IndexElementSize::Bits16,
         );
@@ -281,9 +284,14 @@ impl Batch {
         }
     }
 
-    fn set_draw_list(&mut self, device: &fna3d::Device, draw_list: &imgui::DrawList) {
-        self.vbuf.upload_vertices(&draw_list.vtx_buffer(), device);
-        self.ibuf.upload_indices(&draw_list.idx_buffer(), device);
+    fn set_buffers(
+        &mut self,
+        device: &fna3d::Device,
+        vbuf: &[imgui::DrawVert],
+        ibuf: &[imgui::DrawIdx],
+    ) {
+        self.vbuf.upload_vertices(vbuf, device);
+        self.ibuf.upload_indices(ibuf, device);
     }
 
     /// Sets up rendering pipeline before making a draw call
