@@ -279,7 +279,8 @@ impl RendererImplUtil for ImGuiRokolGfx {
         _dummy_device: &mut <Self as Renderer>::Device,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        if params.vtx_offset == 0 {
+        // on first draw call: set states
+        if params.idx_offset == 0 {
             // 1. append buffers
             rg::append_buffer(self.binds.vertex_buffers[0], params.vtx_buffer);
             rg::append_buffer(self.binds.index_buffer, params.idx_buffer);

@@ -70,11 +70,8 @@ fn main() -> Result<()> {
 
         let mut dummy_device = ();
         let ui = backend.begin_frame(&handles.win);
-
-        // use imgui here
         let mut b = true;
         ui.show_demo_window(&mut b);
-
         ui.end_frame(&mut handles.win, &mut dummy_device)?;
 
         // swap buffer

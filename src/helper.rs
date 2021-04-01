@@ -145,19 +145,19 @@ impl Rect {
 /// Context and parameters for a draw call; extentended [`imgui::DrawCmdParams`]
 #[derive(Debug, Clone)]
 pub struct DrawParams<'a> {
-    /// Display [`Rect`] for orthographic projection matrix
+    /// Display [`Rect`]. Can be used for calculating orthographic projection matrix
     pub display: Rect,
-    /// Vertex buffer
+    /// Vertex buffer for multiple draw calls, sliced with `vtx_offset` and `n_elems`
     pub vtx_buffer: &'a [imgui::DrawVert],
-    /// Vertex offset for this draw cal
+    /// Vertex offset for this draw call
     pub vtx_offset: usize,
-    /// Index buffer
+    /// Index buffer for multiple draw calls, sliced with `vtx_offset` and `n_elems`
     pub idx_buffer: &'a [imgui::DrawIdx],
-    /// Index offset for this draw cal
+    /// Index offset for this draw call
     pub idx_offset: usize,
     /// Number of triangles for this draw call: `n_elems` = `vbuf_span.len` `4` = `ibuf.len` / `6`
     pub n_elems: usize,
-    /// Texture ID for this draw call
+    /// Texture ID
     pub tex_id: imgui::TextureId,
     /// Scissor rectangle
     pub scissor: Rect,
@@ -235,31 +235,30 @@ fn render_impl<T: RendererImplUtil>(
                         || clip_rect[2] < 0.0
                         || clip_rect[3] < 0.0
                     {
-                        // skip
-                    } else {
-                        // [left, up, right, bottom]
-                        let [x, y, z, w] = cmd_params.clip_rect;
-                        let scissor = Rect {
-                            left: x * clip_scale[0],
-                            up: fb_height - w * clip_scale[1],
-                            right: (z - x) * clip_scale[0],
-                            down: (w - y) * clip_scale[1],
-                        };
-
-                        let params = DrawParams {
-                            display: display_rect.clone(),
-                            vtx_buffer: draw_list.vtx_buffer(),
-                            vtx_offset: cmd_params.vtx_offset,
-                            idx_buffer: draw_list.idx_buffer(),
-                            idx_offset: cmd_params.idx_offset,
-                            n_elems: count,
-                            tex_id: cmd_params.texture_id,
-                            scissor,
-                        };
-
-                        // TODO: with matrix inforation and texture
-                        renderer.draw(device, &params)?;
+                        continue;
                     }
+
+                    // [left, up, right, bottom]
+                    let [x, y, z, w] = cmd_params.clip_rect;
+                    let scissor = Rect {
+                        left: x * clip_scale[0],
+                        up: fb_height - w * clip_scale[1],
+                        right: (z - x) * clip_scale[0],
+                        down: (w - y) * clip_scale[1],
+                    };
+
+                    let params = DrawParams {
+                        display: display_rect.clone(),
+                        vtx_buffer: draw_list.vtx_buffer(),
+                        vtx_offset: cmd_params.vtx_offset,
+                        idx_buffer: draw_list.idx_buffer(),
+                        idx_offset: cmd_params.idx_offset,
+                        n_elems: count,
+                        tex_id: cmd_params.texture_id,
+                        scissor,
+                    };
+
+                    renderer.draw(device, &params)?;
                 }
                 DrawCmd::ResetRenderState => {
                     log::warn!("imgui-backends: ResetRenderState is not implemented");
