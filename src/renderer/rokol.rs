@@ -3,6 +3,7 @@
 */
 
 use {
+    anyhow::*,
     imgui::{im_str, BackendFlags},
     rokol::gfx::{self as rg, BakedResource},
     thiserror::Error,
@@ -17,10 +18,12 @@ use crate::{
 pub const JP_FONT: &[u8] = include_bytes!("../../assets/mplus-1p-regular.ttf");
 
 /// Number of quadliterals
-const N_QUADS: usize = 8192;
+pub const N_QUADS: usize = 8192;
+
+pub const FONT_TEXTUER_ID: usize = usize::MAX;
 
 /// Size of a vertex in bytes
-const VERT_SIZE: usize = 20;
+pub const VERT_SIZE: usize = 20;
 
 // TODO: extend and use this error
 #[derive(Debug, Error)]
@@ -217,30 +220,49 @@ impl ImGuiRokolGfx {
         })
     }
 
+    /// Create font texture with ID `FONT_TEXTURE_ID`
     fn load_font_texture(
         mut fonts: imgui::FontAtlasRefMut,
     ) -> Result<Texture2d, ImGuiRendererError> {
-        let atlas_texture = fonts.build_rgba32_texture();
-        let (pixels, w, h) = (
-            atlas_texture.data,
-            atlas_texture.width,
-            atlas_texture.height,
-        );
+        let tex = {
+            let atlas_texture = fonts.build_rgba32_texture();
+            let (pixels, w, h) = (
+                atlas_texture.data,
+                atlas_texture.width,
+                atlas_texture.height,
+            );
 
-        let img = rg::Image::create(&{
-            let mut desc = rg::ImageDesc {
-                type_: rg::ImageType::Dim2 as u32,
-                // FIXME: Is immutable OK?
-                usage: rg::ResourceUsage::Immutable as u32,
-                width: w as i32,
-                height: h as i32,
-                ..Default::default()
-            };
-            desc.data.subimage[0][0] = pixels.as_ref().into();
-            desc
-        });
+            let img = rg::Image::create(&{
+                let mut desc = rg::ImageDesc {
+                    type_: rg::ImageType::Dim2 as u32,
+                    // FIXME: Is immutable OK?
+                    usage: rg::ResourceUsage::Immutable as u32,
+                    width: w as i32,
+                    height: h as i32,
+                    ..Default::default()
+                };
+                desc.data.subimage[0][0] = pixels.as_ref().into();
+                desc
+            });
 
-        Ok(Texture2d { img, w, h })
+            Texture2d { img, w, h }
+        };
+
+        // NOTE: we have to set the ID *AFTER* creating the font atlas texture
+        fonts.tex_id = imgui::TextureId::from(FONT_TEXTUER_ID);
+
+        Ok(tex)
+    }
+
+    fn lookup_texture(&self, tex_id: imgui::TextureId) -> Option<&Texture2d> {
+        if tex_id.id() == FONT_TEXTUER_ID {
+            // we didn't store the font texture in `textures`
+            Some(&self.font_texture)
+        } else if let Some(texture) = self.textures.get(tex_id) {
+            Some(texture)
+        } else {
+            None
+        }
     }
 }
 
@@ -308,15 +330,19 @@ impl RendererImplUtil for ImGuiRokolGfx {
         }
 
         // 1. scissor
-        // // FIXME: crash
+        // FIXME: crash happens
         // rg::scissor_f(
-        //     scissor.left(),
-        //     scissor.up(),
-        //     scissor.width(),
-        //     scissor.height(),
+        //     params.scissor.left(),
+        //     params.scissor.up(),
+        //     params.scissor.width(),
+        //     params.scissor.height(),
         // );
 
-        // FIXME: 2. set texture
+        // 2. set texture
+        let tex = self
+            .lookup_texture(params.tex_id)
+            .ok_or_else(|| anyhow!("Bad texture id: {:?}", params.tex_id))?;
+        self.binds.fs_images[0] = tex.img;
 
         // 3. draw
         rg::apply_bindings(&self.binds);
