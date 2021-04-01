@@ -3,21 +3,27 @@
 */
 
 use {
-    imgui::{im_str, BackendFlags, DrawCmdParams, DrawData},
+    anyhow::*,
+    imgui::{im_str, BackendFlags},
     rokol::gfx::{self as rg, BakedResource},
     thiserror::Error,
 };
 
-use crate::{helper::RendererImplUtil, Renderer};
+use crate::{
+    helper::{DrawParams, RendererImplUtil},
+    Renderer,
+};
 
 /// `mplus-1p-regular.ttf`
 pub const JP_FONT: &[u8] = include_bytes!("../../assets/mplus-1p-regular.ttf");
 
 /// Number of quadliterals
-const N_QUADS: usize = 2048;
+pub const N_QUADS: usize = 8192;
+
+pub const FONT_TEXTUER_ID: usize = usize::MAX;
 
 /// Size of a vertex in bytes
-const VERT_SIZE: usize = 20;
+pub const VERT_SIZE: usize = 20;
 
 // TODO: extend and use this error
 #[derive(Debug, Error)]
@@ -190,17 +196,18 @@ pub struct ImGuiRokolGfx {
 }
 
 impl ImGuiRokolGfx {
-    pub fn new(icx: &mut imgui::Context) -> Result<Self, ImGuiRendererError> {
-        icx.set_renderer_name(Some(im_str!(
+    pub fn new(imgui: &mut imgui::Context) -> Result<Self, ImGuiRendererError> {
+        imgui.set_renderer_name(Some(im_str!(
             "imgui-rokol-renderer {}",
             env!("CARGO_PKG_VERSION")
         )));
 
-        icx.io_mut()
+        imgui
+            .io_mut()
             .backend_flags
             .insert(BackendFlags::RENDERER_HAS_VTX_OFFSET);
 
-        let font_texture = Self::load_font_texture(icx.fonts())?;
+        let font_texture = Self::load_font_texture(imgui.fonts())?;
         let shd = self::create_shader();
         let mut binds = self::create_bindings();
         binds.fs_images[0] = font_texture.img;
@@ -213,30 +220,49 @@ impl ImGuiRokolGfx {
         })
     }
 
+    /// Create font texture with ID `FONT_TEXTURE_ID`
     fn load_font_texture(
         mut fonts: imgui::FontAtlasRefMut,
     ) -> Result<Texture2d, ImGuiRendererError> {
-        let atlas_texture = fonts.build_rgba32_texture();
-        let (pixels, w, h) = (
-            atlas_texture.data,
-            atlas_texture.width,
-            atlas_texture.height,
-        );
+        let tex = {
+            let atlas_texture = fonts.build_rgba32_texture();
+            let (pixels, w, h) = (
+                atlas_texture.data,
+                atlas_texture.width,
+                atlas_texture.height,
+            );
 
-        let img = rg::Image::create(&{
-            let mut desc = rg::ImageDesc {
-                type_: rg::ImageType::Dim2 as u32,
-                // FIXME: Is immutable OK?
-                usage: rg::ResourceUsage::Immutable as u32,
-                width: w as i32,
-                height: h as i32,
-                ..Default::default()
-            };
-            desc.data.subimage[0][0] = pixels.as_ref().into();
-            desc
-        });
+            let img = rg::Image::create(&{
+                let mut desc = rg::ImageDesc {
+                    type_: rg::ImageType::Dim2 as u32,
+                    // FIXME: Is immutable OK?
+                    usage: rg::ResourceUsage::Immutable as u32,
+                    width: w as i32,
+                    height: h as i32,
+                    ..Default::default()
+                };
+                desc.data.subimage[0][0] = pixels.as_ref().into();
+                desc
+            });
 
-        Ok(Texture2d { img, w, h })
+            Texture2d { img, w, h }
+        };
+
+        // NOTE: we have to set the ID *AFTER* creating the font atlas texture
+        fonts.tex_id = imgui::TextureId::from(FONT_TEXTUER_ID);
+
+        Ok(tex)
+    }
+
+    fn lookup_texture(&self, tex_id: imgui::TextureId) -> Option<&Texture2d> {
+        if tex_id.id() == FONT_TEXTUER_ID {
+            // we didn't store the font texture in `textures`
+            Some(&self.font_texture)
+        } else if let Some(texture) = self.textures.get(tex_id) {
+            Some(texture)
+        } else {
+            None
+        }
     }
 }
 
@@ -255,7 +281,7 @@ impl Renderer for ImGuiRokolGfx {
 impl RendererImplUtil for ImGuiRokolGfx {
     fn before_render(
         &mut self,
-        _device: &mut <Self as Renderer>::Device,
+        _dummy_device: &mut <Self as Renderer>::Device,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
         self.binds.vertex_buffer_offsets[0] = 0;
         self.binds.index_buffer_offset = 0;
@@ -270,40 +296,57 @@ impl RendererImplUtil for ImGuiRokolGfx {
         rg::end_pass();
     }
 
-    fn set_proj_mat(&mut self, draw_data: &DrawData) {
-        let mat = crate::helper::ortho_mat_gl(
-            // left, right
-            draw_data.display_pos[0],
-            draw_data.display_pos[0] + draw_data.display_size[0],
-            // bottom, top
-            draw_data.display_pos[1] + draw_data.display_size[1],
-            draw_data.display_pos[1],
-            // near, far
-            1.0,
-            0.0,
-        );
-
-        let bytes = unsafe {
-            std::slice::from_raw_parts(mat.as_ptr() as *const _, std::mem::size_of::<[f32; 16]>())
-        };
-        self.shd.set_vs_uniform(0, bytes);
-    }
-
-    fn set_draw_list(&mut self, draw_list: &imgui::DrawList, _device: &<Self as Renderer>::Device) {
-        // self.binds.vertex_buffer_offsets[0] =
-        rg::append_buffer(self.binds.vertex_buffers[0], draw_list.vtx_buffer());
-        // self.binds.index_buffer_offset =
-        rg::append_buffer(self.binds.index_buffer, draw_list.idx_buffer());
-    }
-
-    fn draw(
+    fn draw<'a>(
         &mut self,
-        _device: &<Self as Renderer>::Device,
-        params: &DrawCmdParams,
-        n_elems: usize,
+        _dummy_device: &mut <Self as Renderer>::Device,
+        params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
+        // on first draw call: set states
+        if params.idx_offset == 0 {
+            // 1. append buffers
+            rg::append_buffer(self.binds.vertex_buffers[0], params.vtx_buffer);
+            rg::append_buffer(self.binds.index_buffer, params.idx_buffer);
+
+            // 2. set orthographic projection matrix
+            let mat = crate::helper::ortho_mat_gl(
+                // left, right
+                params.display.left(),
+                params.display.right(),
+                // bottom, top
+                params.display.up(),
+                params.display.down(),
+                // near, far
+                0.0,
+                1.0,
+            );
+
+            let bytes = unsafe {
+                std::slice::from_raw_parts(
+                    mat.as_ptr() as *const _,
+                    std::mem::size_of::<[f32; 16]>(),
+                )
+            };
+            self.shd.set_vs_uniform(0, bytes);
+        }
+
+        // 1. scissor
+        // FIXME: crash happens
+        // rg::scissor_f(
+        //     params.scissor.left(),
+        //     params.scissor.up(),
+        //     params.scissor.width(),
+        //     params.scissor.height(),
+        // );
+
+        // 2. set texture
+        let tex = self
+            .lookup_texture(params.tex_id)
+            .ok_or_else(|| anyhow!("Bad texture id: {:?}", params.tex_id))?;
+        self.binds.fs_images[0] = tex.img;
+
+        // 3. draw
         rg::apply_bindings(&self.binds);
-        rg::draw(params.idx_offset as u32, n_elems as u32, 1);
+        rg::draw(params.idx_offset as u32, params.n_elems as u32, 1);
         Ok(())
     }
 }

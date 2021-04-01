@@ -30,18 +30,18 @@ fn main() -> Result<()> {
     .map_err(Error::msg)?;
 
     let mut backend = {
-        let mut icx = QuickStart {
+        let mut imgui = QuickStart {
             display_size: [W as f32, H as f32],
             fontsize: 13.0,
             hidpi_factor: 1.0,
         }
         .create_context();
 
-        let platform = ImGuiSdl2::new(&mut icx, &handles.win);
-        let renderer = ImGuiRokolGfx::new(&mut icx)?;
+        let platform = ImGuiSdl2::new(&mut imgui, &handles.win);
+        let renderer = ImGuiRokolGfx::new(&mut imgui)?;
 
         Backend {
-            context: icx,
+            imgui,
             platform,
             renderer,
         }
@@ -53,6 +53,7 @@ fn main() -> Result<()> {
 
     'running: loop {
         let dt = Duration::from_nanos(1_000_000_000 / 30);
+        // TODO: set dt for ImGUI
 
         for ev in pump.poll_iter() {
             match ev {
@@ -61,29 +62,24 @@ fn main() -> Result<()> {
             }
 
             backend.handle_event(&mut handles.win, &ev);
-
-            // FIXME: Can it be cheaper? This is just clearing the screen.
-            rg::begin_default_pass(&pa, 1280, 720);
-            rg::end_pass();
-
-            // ----------
-            let mut dummy_device = ();
-            let ui = backend.begin_frame(&handles.win);
-
-            // use imgui here
-            let mut b = true;
-            ui.show_demo_window(&mut b);
-
-            ui.end_frame(&mut handles.win, &mut dummy_device)?;
-            // ----------
-
-            // swap buffer
-            rg::commit();
-            handles.swap_window();
-
-            // something like 30 FPS. do not use it for real applications
-            std::thread::sleep(dt);
         }
+
+        // FIXME: Can it be cheaper? This is just clearing the screen.
+        rg::begin_default_pass(&pa, 1280, 720);
+        rg::end_pass();
+
+        let mut dummy_device = ();
+        let ui = backend.begin_frame(&handles.win);
+        let mut b = true;
+        ui.show_demo_window(&mut b);
+        ui.end_frame(&mut handles.win, &mut dummy_device)?;
+
+        // swap buffer
+        rg::commit();
+        handles.swap_window();
+
+        // something like 30 FPS. do not use it for real applications
+        std::thread::sleep(dt);
     }
 
     Ok(())

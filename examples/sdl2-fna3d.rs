@@ -97,12 +97,12 @@ impl Init {
 }
 
 impl Init {
-    pub fn create_imgui_backend(&mut self, mut icx: imgui::Context) -> Result<Backend> {
-        let platform = ImGuiSdl2::new(&mut icx, &self.window);
-        let renderer = ImGuiFna3d::init(&mut icx, &self.device)?;
+    pub fn create_imgui_backend(&mut self, mut imgui: imgui::Context) -> Result<Backend> {
+        let platform = ImGuiSdl2::new(&mut imgui, &self.window);
+        let renderer = ImGuiFna3d::init(&mut imgui, &self.device)?;
 
         Ok(Backend {
-            context: icx,
+            imgui,
             platform,
             renderer,
         })
@@ -117,19 +117,20 @@ pub fn main() -> Result<()> {
     let mut handles = Init::init(title, (W, H))?;
 
     let mut backend = {
-        let icx = QuickStart {
+        let imgui = QuickStart {
             display_size: [W as f32, H as f32],
             fontsize: 13.0,
             hidpi_factor: 1.0,
         }
         .create_context();
-        handles.create_imgui_backend(icx)?
+        handles.create_imgui_backend(imgui)?
     };
 
     let mut pump = handles.sdl.event_pump().map_err(Error::msg)?;
 
     'running: loop {
         let dt = Duration::from_nanos(1_000_000_000 / 30);
+        // TODO: set dt for ImGUI
 
         for ev in pump.poll_iter() {
             match ev {
@@ -138,28 +139,26 @@ pub fn main() -> Result<()> {
             }
 
             backend.handle_event(&mut handles.window, &ev);
-
-            handles.device.clear(
-                fna3d::ClearOptions::TARGET,
-                Color::rgb(120, 180, 140).to_vec4(),
-                0.0, // depth
-                0,   // stencil
-            );
-
-            let ui = backend.begin_frame(&handles.window);
-
-            let mut b = true;
-            ui.show_demo_window(&mut b);
-
-            ui.end_frame(&mut handles.window, &mut handles.device)?;
-
-            handles
-                .device
-                .swap_buffers(None, None, handles.raw_window() as *mut _);
-
-            // something like 30 FPS. do not use it for real applications
-            std::thread::sleep(dt);
         }
+
+        handles.device.clear(
+            fna3d::ClearOptions::TARGET,
+            Color::rgb(120, 180, 140).to_vec4(),
+            0.0, // depth
+            0,   // stencil
+        );
+
+        let ui = backend.begin_frame(&handles.window);
+        let mut b = true;
+        ui.show_demo_window(&mut b);
+        ui.end_frame(&mut handles.window, &mut handles.device)?;
+
+        handles
+            .device
+            .swap_buffers(None, None, handles.raw_window() as *mut _);
+
+        // something like 30 FPS. do not use it for real applications
+        std::thread::sleep(dt);
     }
 
     Ok(())
