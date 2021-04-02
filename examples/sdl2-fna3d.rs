@@ -130,7 +130,6 @@ pub fn main() -> Result<()> {
 
     'running: loop {
         let dt = Duration::from_nanos(1_000_000_000 / 30);
-        // TODO: set dt for ImGUI
 
         for ev in pump.poll_iter() {
             match ev {
@@ -140,6 +139,7 @@ pub fn main() -> Result<()> {
 
             backend.handle_event(&mut handles.window, &ev);
         }
+        backend.update_delta_time(dt);
 
         handles.device.clear(
             fna3d::ClearOptions::TARGET,

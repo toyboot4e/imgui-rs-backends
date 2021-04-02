@@ -16,7 +16,10 @@ pub mod platform;
 pub mod renderer;
 
 use imgui::{Context, Io, Ui};
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 /// Half of an `imgui-rs` backend
 pub trait Platform {
@@ -67,6 +70,10 @@ where
 {
     pub fn handle_event(&mut self, window: &P::Window, event: &P::Event) {
         self.platform.handle_event(&mut self.imgui, window, event);
+    }
+
+    pub fn update_delta_time(&mut self, dt: Duration) {
+        self.imgui.io_mut().update_delta_time(dt);
     }
 
     /// TODO: set dt?

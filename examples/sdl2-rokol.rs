@@ -53,7 +53,6 @@ fn main() -> Result<()> {
 
     'running: loop {
         let dt = Duration::from_nanos(1_000_000_000 / 30);
-        // TODO: set dt for ImGUI
 
         for ev in pump.poll_iter() {
             match ev {
@@ -63,6 +62,7 @@ fn main() -> Result<()> {
 
             backend.handle_event(&mut handles.win, &ev);
         }
+        backend.update_delta_time(dt);
 
         // FIXME: Can it be cheaper? This is just clearing the screen.
         rg::begin_default_pass(&pa, 1280, 720);

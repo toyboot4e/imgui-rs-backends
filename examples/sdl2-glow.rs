@@ -87,6 +87,7 @@ fn main() -> Result<()> {
 
             backend.handle_event(&handles.win, &ev);
         }
+        backend.update_delta_time(dt);
 
         unsafe {
             glow.clear(glow::COLOR_BUFFER_BIT);
