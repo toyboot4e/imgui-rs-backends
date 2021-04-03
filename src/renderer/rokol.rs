@@ -1,5 +1,5 @@
 /*!
-`rokol::gfx` integration for `imugi-rs`
+`rokol::gfx` integration for `imgui-rs`
 */
 
 use {

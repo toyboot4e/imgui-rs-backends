@@ -59,6 +59,19 @@ impl QuickStart {
 }
 
 /// Creates an orthographic projection matrix for OpenGL
+///
+/// ```
+/// // left, right, bottom, top, near, far
+/// let mat = ortho_mat_gl(0.0, 1280.0, 0.0, 720.0, 0.0, 1.0);
+/// ```
+///
+/// Note that they're in OpenGL coordinate system and the y axis goes up. Swap `bottom` and `top` if
+/// you want your y axis to go down:
+///
+/// ```
+/// // left, right, top, bottom, near, far
+/// let mat = ortho_mat_gl(0.0, 1280.0, 720.0, 0.0, 0.0, 1.0);
+/// ```
 pub fn ortho_mat_gl(
     left: f32,
     right: f32,
