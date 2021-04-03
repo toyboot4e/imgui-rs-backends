@@ -8,7 +8,7 @@ PR then!
 use {anyhow::*, glow::HasContext, imgui::im_str};
 
 use crate::{
-    helper::{DrawParams, RendererImplUtil},
+    helper::{DrawParams, DrawParamsIterator},
     Renderer,
 };
 
@@ -94,29 +94,29 @@ impl ImGuiGlow {
     }
 }
 
-// implement Renderer by implementing RendererImplUtil
 impl Renderer for ImGuiGlow {
     type Device = glow::Context;
     type Error = String;
     fn render(
         &mut self,
         draw_data: &imgui::DrawData,
-        device: &mut Self::Device,
+        gl: &mut Self::Device,
     ) -> std::result::Result<(), Self::Error> {
-        crate::helper::render(self, draw_data, device)
+        self.before_render(gl);
+        for params in DrawParamsIterator::new(draw_data) {
+            self.draw(gl, &params)?;
+        }
+        self.after_render(gl);
+        Ok(())
     }
 }
 
-impl RendererImplUtil for ImGuiGlow {
-    fn before_render(
-        &mut self,
-        gl: &mut <Self as Renderer>::Device,
-    ) -> std::result::Result<(), <Self as Renderer>::Error> {
+impl ImGuiGlow {
+    fn before_render(&mut self, gl: &mut <Self as Renderer>::Device) {
         self.res.reset_offsets();
         unsafe {
             self.res.bind(gl);
         }
-        Ok(())
     }
 
     fn after_render(&mut self, gl: &mut <Self as Renderer>::Device) {
@@ -171,7 +171,6 @@ impl RendererImplUtil for ImGuiGlow {
             self.res.set_texture(tex_id);
 
             // 3. draw
-            log::trace!("{}", params.idx_offset);
             self.res.bind(gl);
             self.res.draw(
                 gl,

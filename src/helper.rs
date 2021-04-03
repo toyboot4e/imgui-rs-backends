@@ -163,62 +163,85 @@ pub struct DrawParams<'a> {
     pub scissor: Rect,
 }
 
-/// Implement [`Renderer`] by implementing sub procedures
-pub trait RendererImplUtil: Renderer {
-    /// Use pre-multiplied alpha on immediate-mode rendering API
-    fn before_render(
-        &mut self,
-        _device: &mut <Self as Renderer>::Device,
-    ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        Ok(())
-    }
-    /// Issue a draw call
-    fn draw<'a>(
-        &mut self,
-        device: &mut <Self as Renderer>::Device,
-        params: &'a DrawParams,
-    ) -> std::result::Result<(), <Self as Renderer>::Error>;
-    /// Revert the blending mode on immediate-mode rendering API
-    fn after_render(&mut self, _device: &mut <Self as Renderer>::Device) {}
+pub struct DrawParamsIterator<'a> {
+    // variables
+    fb_width: f32,
+    fb_height: f32,
+    clip_off: [f32; 2],
+    clip_scale: [f32; 2],
+    display_rect: Rect,
+    // iterators
+    draw_lists: imgui::DrawListIterator<'a>,
+    draw_list: Option<&'a imgui::DrawList>,
+    draw_commands: Option<imgui::DrawCmdIterator<'a>>,
 }
 
-pub fn render<T: RendererImplUtil>(
-    renderer: &mut T,
-    draw_data: &imgui::DrawData,
-    device: &mut <T as Renderer>::Device,
-) -> std::result::Result<(), <T as Renderer>::Error> {
-    renderer.before_render(device)?;
-    let res = self::render_impl(renderer, draw_data, device);
-    renderer.after_render(device);
-    res
+impl<'a> DrawParamsIterator<'a> {
+    pub fn new(data: &'a imgui::DrawData) -> Self {
+        // framebuffer size
+        let fb_width = data.display_size[0] * data.framebuffer_scale[0];
+        let fb_height = data.display_size[1] * data.framebuffer_scale[1];
+
+        // FIXME:
+        // if fb_width <= 0.0 || fb_height <= 0.0 {
+        //     return Ok(());
+        // }
+
+        let clip_off = data.display_pos;
+        let clip_scale = data.framebuffer_scale;
+
+        let display_rect = Rect {
+            left: data.display_pos[0],
+            right: data.display_pos[0] + data.display_size[0],
+            up: data.display_pos[1] + data.display_size[1],
+            down: data.display_pos[1],
+        };
+
+        let mut draw_lists = data.draw_lists();
+        let (draw_list, draw_commands) = match draw_lists.next() {
+            Some(list) => (Some(list), Some(list.commands())),
+            None => (None, None),
+        };
+
+        Self {
+            fb_width,
+            fb_height,
+            clip_off,
+            clip_scale,
+            display_rect,
+            draw_lists,
+            draw_list,
+            draw_commands,
+        }
+    }
 }
 
-fn render_impl<T: RendererImplUtil>(
-    renderer: &mut T,
-    draw_data: &imgui::DrawData,
-    device: &mut <T as Renderer>::Device,
-) -> std::result::Result<(), <T as Renderer>::Error> {
-    // framebuffer size
-    let fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
-    let fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
+impl<'a> Iterator for DrawParamsIterator<'a> {
+    type Item = DrawParams<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let clip_off = self.clip_off;
+        let clip_scale = self.clip_scale;
+        let fb_width = self.fb_width;
+        let fb_height = self.fb_height;
+        let display_rect = self.display_rect.clone();
 
-    if fb_width <= 0.0 || fb_height <= 0.0 {
-        return Ok(());
-    }
+        // iterator version of this loop:
+        // for draw_list in draw_data.draw_lists() {
+        //     for cmd in draw_list.commands() {
+        'next: loop {
+            let cmd = loop {
+                match self.draw_commands.as_mut()?.next() {
+                    Some(cmd) => break cmd,
+                    None => {
+                        // go to next list
+                        self.draw_list = self.draw_lists.next();
+                        self.draw_commands = Some(self.draw_list?.commands());
+                        continue;
+                    }
+                }
+            };
 
-    let clip_off = draw_data.display_pos;
-    let clip_scale = draw_data.framebuffer_scale;
-
-    let display_rect = Rect {
-        left: draw_data.display_pos[0],
-        right: draw_data.display_pos[0] + draw_data.display_size[0],
-        up: draw_data.display_pos[1] + draw_data.display_size[1],
-        down: draw_data.display_pos[1],
-    };
-
-    for draw_list in draw_data.draw_lists() {
-        for cmd in draw_list.commands() {
-            match cmd {
+            break match cmd {
                 DrawCmd::Elements { count, cmd_params } => {
                     let clip_rect = &cmd_params.clip_rect;
 
@@ -235,7 +258,7 @@ fn render_impl<T: RendererImplUtil>(
                         || clip_rect[2] < 0.0
                         || clip_rect[3] < 0.0
                     {
-                        continue;
+                        continue 'next;
                     }
 
                     // [left, up, right, bottom]
@@ -247,29 +270,27 @@ fn render_impl<T: RendererImplUtil>(
                         down: (w - y) * clip_scale[1],
                     };
 
-                    let params = DrawParams {
+                    Some(DrawParams {
                         display: display_rect.clone(),
-                        vtx_buffer: draw_list.vtx_buffer(),
+                        vtx_buffer: self.draw_list?.vtx_buffer(),
                         vtx_offset: cmd_params.vtx_offset,
-                        idx_buffer: draw_list.idx_buffer(),
+                        idx_buffer: self.draw_list?.idx_buffer(),
                         idx_offset: cmd_params.idx_offset,
                         n_elems: count,
                         tex_id: cmd_params.texture_id,
                         scissor,
-                    };
-
-                    renderer.draw(device, &params)?;
+                    })
                 }
                 DrawCmd::ResetRenderState => {
                     log::warn!("imgui-backends: ResetRenderState is not implemented");
+                    None
                 }
                 DrawCmd::RawCallback { callback, raw_cmd } => unsafe {
                     log::warn!("imgui-backends: RawCallback is not implemented");
-                    callback(draw_list.raw(), raw_cmd)
+                    callback(self.draw_list?.raw(), raw_cmd);
+                    None
                 },
-            }
+            };
         }
     }
-
-    Ok(())
 }

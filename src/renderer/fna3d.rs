@@ -14,7 +14,7 @@ use {
 };
 
 use crate::{
-    helper::{DrawParams, RendererImplUtil},
+    helper::{DrawParams, DrawParamsIterator},
     Renderer,
 };
 
@@ -77,7 +77,6 @@ impl RcTexture2d {
 pub struct ImGuiFna3d {
     textures: imgui::Textures<RcTexture2d>,
     font_texture: RcTexture2d,
-    // TODO: remove batch?
     batch: Batch,
 }
 
@@ -156,21 +155,17 @@ impl Renderer for ImGuiFna3d {
         draw_data: &imgui::DrawData,
         device: &mut Self::Device,
     ) -> std::result::Result<(), Self::Error> {
-        crate::helper::render(self, draw_data, device)
+        self.before_render(device);
+        for params in DrawParamsIterator::new(draw_data) {
+            self.draw(device, &params)?;
+        }
+        Ok(())
     }
 }
 
-impl RendererImplUtil for ImGuiFna3d {
-    fn before_render(
-        &mut self,
-        device: &mut <Self as Renderer>::Device,
-    ) -> std::result::Result<(), <Self as Renderer>::Error> {
+impl ImGuiFna3d {
+    fn before_render(&mut self, device: &mut <Self as Renderer>::Device) {
         device.set_blend_state(&fna3d::BlendState::non_premultiplied());
-        Ok(())
-    }
-
-    fn after_render(&mut self, _device: &mut <Self as Renderer>::Device) {
-        //
     }
 
     fn draw<'a>(
@@ -178,7 +173,7 @@ impl RendererImplUtil for ImGuiFna3d {
         device: &mut <Self as Renderer>::Device,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        if params.vtx_offset == 0 {
+        if params.idx_offset == 0 {
             // 1. append buffers
             self.batch
                 .set_buffers(device, params.vtx_buffer, params.idx_buffer);
@@ -246,7 +241,7 @@ impl RendererImplUtil for ImGuiFna3d {
 }
 
 // --------------------------------------------------------------------------------
-// Batch
+// Batch TODO: refactor
 
 /// Buffer of GPU buffers
 ///

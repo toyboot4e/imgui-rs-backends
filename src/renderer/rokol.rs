@@ -10,7 +10,7 @@ use {
 };
 
 use crate::{
-    helper::{DrawParams, RendererImplUtil},
+    helper::{DrawParams, DrawParamsIterator},
     Renderer,
 };
 
@@ -272,33 +272,31 @@ impl Renderer for ImGuiRokolGfx {
     fn render(
         &mut self,
         draw_data: &imgui::DrawData,
-        device: &mut Self::Device,
+        _device: &mut Self::Device,
     ) -> std::result::Result<(), Self::Error> {
-        crate::helper::render(self, draw_data, device)
+        self.before_render();
+        for params in DrawParamsIterator::new(draw_data) {
+            self.draw(&params)?;
+        }
+        self.after_render();
     }
 }
 
-impl RendererImplUtil for ImGuiRokolGfx {
-    fn before_render(
-        &mut self,
-        _dummy_device: &mut <Self as Renderer>::Device,
-    ) -> std::result::Result<(), <Self as Renderer>::Error> {
+impl ImGuiRokolGfx {
+    fn before_render(&mut self) {
         self.binds.vertex_buffer_offsets[0] = 0;
         self.binds.index_buffer_offset = 0;
 
         rg::begin_default_pass(&rg::PassAction::LOAD, 1280, 720);
         self.shd.apply_pip();
-
-        Ok(())
     }
 
-    fn after_render(&mut self, _device: &mut <Self as Renderer>::Device) {
+    fn after_render(&mut self) {
         rg::end_pass();
     }
 
     fn draw<'a>(
         &mut self,
-        _dummy_device: &mut <Self as Renderer>::Device,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
         // on first draw call: set states
