@@ -1,7 +1,7 @@
 /*!
 Helper
 
-TODO: Replace it with an iterator (DrawCalls::pull)
+NOTE: Take care of the coordinate system: `Rect` thinks y axis goes up!
 */
 
 use imgui::{FontConfig, FontSource};
@@ -80,7 +80,7 @@ pub fn ortho_mat_gl(
         // ---
         0.0,
         0.0,
-        -(1.0 / (far as f64 - near as f64)) as f32,
+        -(2.0 / (far as f64 - near as f64)) as f32,
         0.0,
         // ---
         -((right as f64 + left as f64) / (right as f64 - left as f64)) as f32,
@@ -97,23 +97,24 @@ pub enum ImGuiRendererError {
     BadTexture(imgui::TextureId),
 }
 
-/// Rectangle
+/// Rectangle. NOTE: Y axis goes up
 ///
 /// # Coordinate system
 /// ```md
+///    (up)
 ///     y
 ///     ^
 ///     |
-/// ----+---> x
+/// ----+---> x (right)
 ///     |
 ///     |
 /// ```
 #[derive(Debug, Clone)]
 pub struct Rect {
     left: f32,
-    up: f32,
+    top: f32,
     right: f32,
-    down: f32,
+    bottom: f32,
 }
 
 impl Rect {
@@ -121,28 +122,33 @@ impl Rect {
         self.left
     }
 
-    pub fn up(&self) -> f32 {
-        self.up
+    /// NOTE: Y axies goes up
+    pub fn top(&self) -> f32 {
+        self.top
     }
 
     pub fn right(&self) -> f32 {
         self.right
     }
 
-    pub fn down(&self) -> f32 {
-        self.down
+    /// NOTE: Y axies goes up
+    pub fn bottom(&self) -> f32 {
+        self.bottom
     }
 
     pub fn width(&self) -> f32 {
-        self.right - self.left
+        // FIXME:
+        (self.right - self.left).abs()
     }
 
     pub fn height(&self) -> f32 {
-        self.down - self.up
+        // FIXME: somehow the sign changes every frame
+        (self.top - self.bottom).abs()
     }
 }
 
-/// Context and parameters for a draw call; extentended [`imgui::DrawCmdParams`]
+/// Context and parameters for making a draw call; more comfortable version of
+/// [`imgui::DrawCmdParams`]
 #[derive(Debug, Clone)]
 pub struct DrawParams<'a> {
     /// Display [`Rect`]. Can be used for calculating orthographic projection matrix
@@ -163,6 +169,7 @@ pub struct DrawParams<'a> {
     pub scissor: Rect,
 }
 
+/// Iterator of [`DrawParams`]
 pub struct DrawParamsIterator<'a> {
     // variables
     fb_width: f32,
@@ -182,22 +189,31 @@ impl<'a> DrawParamsIterator<'a> {
         let fb_width = data.display_size[0] * data.framebuffer_scale[0];
         let fb_height = data.display_size[1] * data.framebuffer_scale[1];
 
-        // FIXME:
-        // if fb_width <= 0.0 || fb_height <= 0.0 {
-        //     return Ok(());
-        // }
-
         let clip_off = data.display_pos;
         let clip_scale = data.framebuffer_scale;
 
         let display_rect = Rect {
             left: data.display_pos[0],
             right: data.display_pos[0] + data.display_size[0],
-            up: data.display_pos[1] + data.display_size[1],
-            down: data.display_pos[1],
+            top: data.display_pos[1] + data.display_size[1],
+            bottom: data.display_pos[1],
         };
 
         let mut draw_lists = data.draw_lists();
+
+        if fb_width <= 0.0 || fb_height <= 0.0 {
+            return Self {
+                fb_width,
+                fb_height,
+                clip_off,
+                clip_scale,
+                display_rect,
+                draw_lists,
+                draw_list: None,
+                draw_commands: None,
+            };
+        }
+
         let (draw_list, draw_commands) = match draw_lists.next() {
             Some(list) => (Some(list), Some(list.commands())),
             None => (None, None),
@@ -225,7 +241,7 @@ impl<'a> Iterator for DrawParamsIterator<'a> {
         let fb_height = self.fb_height;
         let display_rect = self.display_rect.clone();
 
-        // iterator version of this loop:
+        // One step of this loop:
         // for draw_list in draw_data.draw_lists() {
         //     for cmd in draw_list.commands() {
         'next: loop {
@@ -243,31 +259,32 @@ impl<'a> Iterator for DrawParamsIterator<'a> {
 
             break match cmd {
                 DrawCmd::Elements { count, cmd_params } => {
-                    let clip_rect = &cmd_params.clip_rect;
-
-                    // [left, up, right, down]
-                    let clip_rect = [
-                        (clip_rect[0] - clip_off[0]) * clip_scale[0],
-                        (clip_rect[1] - clip_off[1]) * clip_scale[1],
-                        (clip_rect[2] - clip_off[0]) * clip_scale[0],
-                        (clip_rect[3] - clip_off[1]) * clip_scale[1],
-                    ];
-
-                    if clip_rect[0] >= fb_width
-                        || clip_rect[1] >= fb_height
-                        || clip_rect[2] < 0.0
-                        || clip_rect[3] < 0.0
                     {
-                        continue 'next;
+                        let clip_rect = &cmd_params.clip_rect;
+                        // [left, up, right, down]
+                        let clip_rect = [
+                            (clip_rect[0] - clip_off[0]) * clip_scale[0],
+                            (clip_rect[1] - clip_off[1]) * clip_scale[1],
+                            (clip_rect[2] - clip_off[0]) * clip_scale[0],
+                            (clip_rect[3] - clip_off[1]) * clip_scale[1],
+                        ];
+
+                        if clip_rect[0] >= fb_width
+                            || clip_rect[1] >= fb_height
+                            || clip_rect[2] < 0.0
+                            || clip_rect[3] < 0.0
+                        {
+                            continue 'next;
+                        }
                     }
 
                     // [left, up, right, bottom]
                     let [x, y, z, w] = cmd_params.clip_rect;
                     let scissor = Rect {
                         left: x * clip_scale[0],
-                        up: fb_height - w * clip_scale[1],
+                        top: fb_height - w * clip_scale[1],
                         right: (z - x) * clip_scale[0],
-                        down: (w - y) * clip_scale[1],
+                        bottom: (w - y) * clip_scale[1],
                     };
 
                     Some(DrawParams {

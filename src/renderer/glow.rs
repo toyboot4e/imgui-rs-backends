@@ -141,9 +141,10 @@ impl ImGuiGlow {
                 // left, right
                 params.display.left(),
                 params.display.right(),
-                // bottom, top
-                params.display.up(),
-                params.display.down(),
+                // bottom, top.
+                // Since we want to flip the y axis so that it goes down, we'll swap top and bottom
+                params.display.top(),
+                params.display.bottom(),
                 // near, far
                 0.0,
                 1.0,
@@ -158,9 +159,9 @@ impl ImGuiGlow {
             // 1. scissor
             gl.scissor(
                 params.scissor.left() as i32,
-                params.scissor.up() as i32,
+                params.scissor.top() as i32,
                 params.scissor.right() as i32,
-                params.scissor.down() as i32,
+                params.scissor.bottom() as i32,
             );
 
             // 2. set texture

@@ -184,8 +184,9 @@ impl ImGuiFna3d {
                 params.display.left(),
                 params.display.right(),
                 // bottom, top
-                params.display.up(),
-                params.display.down(),
+                // Since we want to flip the y axis so that it goes down, we'll swap top and bottom
+                params.display.top(),
+                params.display.bottom(),
                 // near, far
                 0.0,
                 1.0,
@@ -201,9 +202,10 @@ impl ImGuiFna3d {
         }
 
         // 1. scissor
+        log::trace!("{}", params.scissor.height());
         device.set_scissor_rect(&fna3d::Rect {
             x: params.scissor.left() as i32,
-            y: params.scissor.up() as i32,
+            y: params.scissor.top() as i32,
             w: params.scissor.width() as i32,
             h: params.scissor.height() as i32,
         });

@@ -1,13 +1,7 @@
 /*!
-Backend for [`imgui-rs`]
+Framework for providing various backends for [`imgui-rs`]. See [`examples`] to get started.
 
 [`imgui-rs`]: https://github.com/Gekkio/imgui-rs
-
-[`imgui-rs`] backends are made of platform and renderer. `imgui-backend` separates and combines them
-so that any combination is allowed.
-
-See [`examples`] to get started.
-
 [`examples`]: https://github.com/toyboot4e/imgui-rs-backends
 */
 
@@ -38,7 +32,7 @@ pub trait Platform {
     fn prepare_render(&mut self, ui: &Ui<'_>, window: &Self::Window);
 }
 
-/// Half of an `imgui-rs` backend. See also: [`helper::RendererImplUtil`]
+/// Half of an `imgui-rs` backend
 pub trait Renderer {
     /// Rendering context
     type Device;
