@@ -1,7 +1,7 @@
 /*!
 Rust-SDL2 platform integration for `imgui-rs`
 
-This is very much based on [rust-imgui-sdl2]. Many thanks to them!
+This is very much a copy of [rust-imgui-sdl2]. Many thanks to them!
 
 [rust-imgui-sdl2]: https://github.com/michaelfairley/rust-imgui-sdl2
 */
@@ -103,7 +103,12 @@ impl Platform for ImGuiSdl2 {
     type Event = sdl2::event::Event;
     type Window = sdl2::video::Window;
 
-    fn handle_event(&mut self, imgui: &mut Context, _window:&Self::Window, event: &Self::Event) -> bool {
+    fn handle_event(
+        &mut self,
+        imgui: &mut Context,
+        _window: &Self::Window,
+        event: &Self::Event,
+    ) -> bool {
         use sdl2::keyboard;
         use sdl2::mouse::MouseButton;
 

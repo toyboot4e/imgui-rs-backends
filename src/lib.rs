@@ -35,7 +35,6 @@ pub trait Platform {
     ) -> bool;
     /// Sets up input state
     fn prepare_frame(&mut self, io: &mut Io, window: &Self::Window);
-    /// TODO: docstring
     fn prepare_render(&mut self, ui: &Ui<'_>, window: &Self::Window);
 }
 
@@ -76,7 +75,6 @@ where
         self.imgui.io_mut().update_delta_time(dt);
     }
 
-    /// TODO: set dt?
     pub fn begin_frame<'a>(&'a mut self, window: &P::Window) -> BackendUi<'a, P, R> {
         self.platform.prepare_frame(self.imgui.io_mut(), window);
         BackendUi {

@@ -22,7 +22,7 @@ unsafe fn gen_shader_program(gl: &glow::Context, sources: &[(u32, &str)]) -> glo
         gl.shader_source(shader, &src);
         gl.compile_shader(shader);
         if !gl.get_shader_compile_status(shader) {
-            panic!(gl.get_shader_info_log(shader));
+            panic!("{}", gl.get_shader_info_log(shader));
         }
         gl.attach_shader(program, shader);
         shaders.push(shader);
@@ -30,7 +30,7 @@ unsafe fn gen_shader_program(gl: &glow::Context, sources: &[(u32, &str)]) -> glo
 
     gl.link_program(program);
     if !gl.get_program_link_status(program) {
-        panic!(gl.get_program_info_log(program));
+        panic!("{}", gl.get_program_info_log(program));
     }
 
     for shader in shaders {
@@ -44,9 +44,7 @@ unsafe fn gen_shader_program(gl: &glow::Context, sources: &[(u32, &str)]) -> glo
 unsafe fn alloc_buffer(gl: &glow::Context, type_: u32, capacity: usize) -> Result<glow::Buffer> {
     let buf = gl.create_buffer().map_err(Error::msg)?;
     gl.bind_buffer(type_, Some(buf));
-    // FIXME:
-    // gl.buffer_data_size(type_, capacity as i32, glow::STREAM_DRAW);
-    gl.buffer_data_size(type_, capacity as i32, glow::STATIC_DRAW);
+    gl.buffer_data_size(type_, capacity as i32, glow::STREAM_DRAW);
     gl.bind_buffer(type_, None);
     Ok(buf)
 }
