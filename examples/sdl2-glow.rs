@@ -77,8 +77,6 @@ fn main() -> Result<()> {
     let mut pump = handles.sdl.event_pump().map_err(Error::msg)?;
 
     'running: loop {
-        let dt = Duration::from_nanos(1_000_000_000 / 30);
-
         for ev in pump.poll_iter() {
             match ev {
                 Event::Quit { .. } => break 'running,
@@ -87,6 +85,9 @@ fn main() -> Result<()> {
 
             backend.handle_event(&handles.win, &ev);
         }
+
+        // something like 30 FPS. do not use it for real applications
+        let dt = Duration::from_nanos(1_000_000_000 / 30);
         backend.update_delta_time(dt);
 
         unsafe {
@@ -105,7 +106,6 @@ fn main() -> Result<()> {
         // swap buffer
         handles.swap_window();
 
-        // something like 30 FPS. do not use it for real applications
         std::thread::sleep(dt);
     }
 

@@ -52,8 +52,6 @@ fn main() -> Result<()> {
     let pa = rg::PassAction::clear([100.0 / 255.0, 149.0 / 255.0, 237.0 / 255.0, 1.0]);
 
     'running: loop {
-        let dt = Duration::from_nanos(1_000_000_000 / 30);
-
         for ev in pump.poll_iter() {
             match ev {
                 Event::Quit { .. } => break 'running,
@@ -62,6 +60,9 @@ fn main() -> Result<()> {
 
             backend.handle_event(&mut handles.win, &ev);
         }
+
+        // something like 30 FPS. do not use it for real applications
+        let dt = Duration::from_nanos(1_000_000_000 / 30);
         backend.update_delta_time(dt);
 
         // FIXME: Can it be cheaper? This is just clearing the screen.
@@ -78,7 +79,6 @@ fn main() -> Result<()> {
         rg::commit();
         handles.swap_window();
 
-        // something like 30 FPS. do not use it for real applications
         std::thread::sleep(dt);
     }
 
