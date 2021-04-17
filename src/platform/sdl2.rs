@@ -14,6 +14,7 @@ use {
         mouse::{Cursor, SystemCursor},
         video::Window,
     },
+    std::fmt,
 };
 
 use crate::Platform;
@@ -26,6 +27,17 @@ pub struct ImGuiSdl2 {
     cursor: Option<MouseCursor>,
     /// TODO: use it?
     sdl_cursor: Option<Cursor>,
+}
+
+impl fmt::Debug for ImGuiSdl2 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImGuiSdl2")
+            .field("mouse_press", &self.mouse_press)
+            .field("ignore_keyboard", &self.ignore_keyboard)
+            .field("cursor", &self.cursor)
+            .field("sdl_cursor", &"DEBUG unimplemented")
+            .finish()
+    }
 }
 
 struct Sdl2ClipboardBackend(sdl2::clipboard::ClipboardUtil);

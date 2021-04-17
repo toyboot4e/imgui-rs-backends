@@ -46,6 +46,7 @@ pub trait Renderer {
 }
 
 /// `imgui-rs` backend = `imgui::Context` + `Platform` + `Renderer`
+#[derive(Debug)]
 pub struct Backend<P, R>
 where
     P: Platform,
