@@ -24,6 +24,7 @@ pub struct ImGuiSdl2 {
     ignore_mouse: bool,
     ignore_keyboard: bool,
     cursor: Option<MouseCursor>,
+    /// TODO: use it?
     sdl_cursor: Option<Cursor>,
 }
 

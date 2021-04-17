@@ -279,6 +279,7 @@ impl Renderer for ImGuiRokolGfx {
             self.draw(&params)?;
         }
         self.after_render();
+        Ok(())
     }
 }
 
@@ -302,17 +303,31 @@ impl ImGuiRokolGfx {
         // on first draw call: set states
         if params.idx_offset == 0 {
             // 1. append buffers
-            rg::append_buffer(self.binds.vertex_buffers[0], params.vtx_buffer);
-            rg::append_buffer(self.binds.index_buffer, params.idx_buffer);
+            unsafe {
+                rg::append_buffer(
+                    self.binds.vertex_buffers[0],
+                    std::slice::from_raw_parts(
+                        params.vtx_buffer.as_ptr() as *const u8,
+                        std::mem::size_of::<imgui::DrawVert>() * params.vtx_buffer.len(),
+                    ),
+                );
+                rg::append_buffer(
+                    self.binds.index_buffer,
+                    std::slice::from_raw_parts(
+                        params.idx_buffer.as_ptr() as *const u8,
+                        std::mem::size_of::<imgui::DrawIdx>() * params.idx_buffer.len(),
+                    ),
+                );
+            }
 
             // 2. set orthographic projection matrix
             let mat = crate::helper::ortho_mat_gl(
                 // left, right
                 params.display.left(),
                 params.display.right(),
-                // bottom, top
-                params.display.up(),
-                params.display.down(),
+                // bottom, top (flipped so that y axis goes down)
+                params.display.top(),
+                params.display.bottom(),
                 // near, far
                 0.0,
                 1.0,
@@ -345,6 +360,7 @@ impl ImGuiRokolGfx {
         // 3. draw
         rg::apply_bindings(&self.binds);
         rg::draw(params.idx_offset as u32, params.n_elems as u32, 1);
+
         Ok(())
     }
 }
