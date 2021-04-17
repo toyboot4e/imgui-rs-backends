@@ -8,16 +8,16 @@ edition = "2018"
 imgui = "0.7.0"
 
 # platform
-sdl2 = "0.34.3"
-winit = "0.24.0"
+sdl2 = { version = "0.34.3", optional = true }
+winit =  { version = "0.24.0", optional = true }
 
 # renderer
-fna3d = "0.1.5"
-rokol = { git = "https://github.com/toyboot4e/rokol", rev = "2fcc5ed", features = ["impl-app", "impl-gfx", "glcore33", "use-sdl2"] }
+fna3d = { version = "0.1.5", optional = true }
+rokol = { git = "https://github.com/toyboot4e/rokol", rev = "9b46cb5", optional = true }
+glow = { version = "0.8.1", optional = true }
 
 # example
 anyhow = "1.0.38"
 log = "0.4.14"
 env_logger = "0.8.3"
 thiserror = "1.0.24"
-glow = "0.8.1"

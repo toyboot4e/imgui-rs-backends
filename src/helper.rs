@@ -11,8 +11,6 @@ use {
     thiserror::Error,
 };
 
-use crate::Renderer;
-
 /// `mplus-1p-regular.ttf`
 pub const JP_FONT: &[u8] = include_bytes!("../assets/mplus-1p-regular.ttf");
 
