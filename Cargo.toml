@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["toyboot4e <toyboot4e@gmail.com>"]
 edition = "2018"
 
+[features]
+sdl2-rokol-gl = ["sdl2", "rokol/sdl2", "rokol/impl-gfx", "rokol/glcore33"]
+
 [dependencies]
 imgui = "0.7.0"
 
