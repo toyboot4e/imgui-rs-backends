@@ -3,6 +3,42 @@ Framework for providing various backends for [`imgui-rs`]. See [`examples`] to g
 
 [`imgui-rs`]: https://github.com/Gekkio/imgui-rs
 [`examples`]: https://github.com/toyboot4e/imgui-rs-backends
+
+# Example
+
+Backend creation:
+
+```no_run
+use imgui_backends::{helper::QuickStart, platform::ImGuiSdl2, renderer::ImGuiGlow};
+pub type Backend = imgui_backends::Backend<ImGuiSdl2, ImGuiGlow>;
+
+let mut backend = {
+    let mut imgui = QuickStart { /* omitted */ }
+        .create_context();
+
+    let platform = ImGuiSdl2::new(&mut imgui, &window);
+    let renderer = ImGuiGlow::new(&mut imgui, &glow)?;
+
+    Backend {
+        imgui,
+        platform,
+        renderer,
+    }
+};
+```
+
+Backend usage:
+
+```no_run
+backend.update_delta_time(dt);
+
+let ui = backend.begin_frame(&window);
+
+// use imgui here
+
+ui.end_frame(&mut window, &mut glow)
+    .map_err(Error::msg)?;
+```
 */
 
 pub mod helper;
