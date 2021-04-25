@@ -129,6 +129,8 @@ impl ImGuiGlow {
         gl: &mut <Self as Renderer>::Device,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
+        log::trace!("{}, {}", params.idx_offset, params.vtx_offset);
+
         // on first draw call: set states
         if params.idx_offset == 0 {
             // 1. reset offsets
