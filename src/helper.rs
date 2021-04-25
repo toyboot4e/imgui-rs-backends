@@ -149,12 +149,14 @@ impl Rect {
 
     pub fn width(&self) -> f32 {
         // FIXME:
-        (self.right - self.left).abs()
+        // (self.right - self.left).abs()
+        (self.right - self.left)
     }
 
     pub fn height(&self) -> f32 {
         // FIXME: somehow the sign changes every frame
-        (self.top - self.bottom).abs()
+        // (self.top - self.bottom).abs()
+        (self.top - self.bottom)
     }
 }
 
@@ -212,22 +214,16 @@ impl<'a> DrawParamsIterator<'a> {
 
         let mut draw_lists = data.draw_lists();
 
-        if fb_width <= 0.0 || fb_height <= 0.0 {
-            return Self {
-                fb_width,
-                fb_height,
-                clip_off,
-                clip_scale,
-                display_rect,
-                draw_lists,
-                draw_list: None,
-                draw_commands: None,
-            };
-        }
-
-        let (draw_list, draw_commands) = match draw_lists.next() {
-            Some(list) => (Some(list), Some(list.commands())),
-            None => (None, None),
+        let (draw_list, draw_commands) = {
+            if fb_width <= 0.0 || fb_height <= 0.0 {
+                // return empty iterator
+                (None, None)
+            } else {
+                match draw_lists.next() {
+                    Some(list) => (Some(list), Some(list.commands())),
+                    None => (None, None),
+                }
+            }
         };
 
         Self {
@@ -293,6 +289,7 @@ impl<'a> Iterator for DrawParamsIterator<'a> {
                     let [x, y, z, w] = cmd_params.clip_rect;
                     let scissor = Rect {
                         left: x * clip_scale[0],
+                        // FIXME: is this correct
                         top: fb_height - w * clip_scale[1],
                         right: (z - x) * clip_scale[0],
                         bottom: (w - y) * clip_scale[1],
@@ -310,11 +307,11 @@ impl<'a> Iterator for DrawParamsIterator<'a> {
                     })
                 }
                 DrawCmd::ResetRenderState => {
-                    log::warn!("imgui-backends: ResetRenderState is not implemented");
+                    log::warn!("imgui-backends: `ResetRenderState` is not implemented");
                     None
                 }
                 DrawCmd::RawCallback { callback, raw_cmd } => unsafe {
-                    log::warn!("imgui-backends: RawCallback is not implemented");
+                    log::warn!("imgui-backends: `RawCallback` is not implemented");
                     callback(self.draw_list?.raw(), raw_cmd);
                     None
                 },

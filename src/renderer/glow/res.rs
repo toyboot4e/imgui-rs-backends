@@ -4,7 +4,7 @@ GPU resources
 
 use anyhow::*;
 use glow::HasContext;
-use std::marker::PhantomData;
+use std::{any::TypeId, marker::PhantomData, mem::size_of};
 
 /// Max number of quadliterals
 pub const N_QUADS: usize = 2048;
@@ -53,44 +53,42 @@ struct Buffer<T> {
     // vertex/index buffer
     type_: u32,
     id: glow::Buffer,
-    // in bytes
-    len: i32,
-    capacity: i32,
+    len_bytes: i32,
+    capacity_bytes: i32,
     _marker: PhantomData<T>,
 }
 
 impl<T> Buffer<T> {
     pub fn new(gl: &glow::Context, type_: u32, len: usize) -> Result<Self> {
         assert!(type_ == glow::ARRAY_BUFFER || type_ == glow::ELEMENT_ARRAY_BUFFER);
-        let capacity = std::mem::size_of::<T>() * len;
-        assert!(capacity < i32::MAX as usize);
+        let capacity_bytes = size_of::<T>() * len;
+        assert!(capacity_bytes < i32::MAX as usize);
 
-        let id = unsafe { self::alloc_buffer(gl, type_, capacity)? };
+        let id = unsafe { self::alloc_buffer(gl, type_, capacity_bytes)? };
 
         Ok(Self {
             type_,
             id,
-            len: 0,
-            capacity: capacity as i32,
+            len_bytes: 0,
+            capacity_bytes: capacity_bytes as i32,
             _marker: PhantomData,
         })
     }
 
     pub fn reset_offset(&mut self) {
-        self.len = 0;
+        self.len_bytes = 0;
     }
 
     pub fn append(&mut self, gl: &glow::Context, data: &[T]) {
-        let new_len = self.len + data.len() as i32;
-        assert!(new_len < self.capacity);
+        let len_bytes = size_of::<T>() * data.len();
+        let new_len_bytes = self.len_bytes + len_bytes as i32;
+        assert!(new_len_bytes <= self.capacity_bytes);
         unsafe {
-            let bytes: &[u8] = std::slice::from_raw_parts(
-                data.as_ptr() as *const _,
-                std::mem::size_of::<T>() * data.len(),
-            );
-            gl.buffer_sub_data_u8_slice(self.type_, self.len, bytes);
+            let bytes: &[u8] = std::slice::from_raw_parts(data.as_ptr() as *const _, len_bytes);
+            // FIXME:
+            gl.buffer_sub_data_u8_slice(self.type_, self.len_bytes, bytes);
         }
-        self.len = new_len;
+        self.len_bytes = new_len_bytes;
     }
 }
 
@@ -125,13 +123,13 @@ impl Resources {
             let vbuf = Buffer::new(
                 gl,
                 glow::ARRAY_BUFFER,
-                4 * N_QUADS * std::mem::size_of::<imgui::DrawVert>(),
+                4 * N_QUADS * size_of::<imgui::DrawVert>(),
             )?;
 
             let ibuf = Buffer::new(
                 gl,
                 glow::ELEMENT_ARRAY_BUFFER,
-                6 * N_QUADS * std::mem::size_of::<imgui::DrawIdx>(),
+                6 * N_QUADS * size_of::<imgui::DrawIdx>(),
             )?;
 
             Ok(Self {
@@ -181,11 +179,13 @@ impl Resources {
     }
 
     pub unsafe fn bind(&self, gl: &glow::Context) {
-        // NOTE: this order is important.. bind buffers first and then setup VAO!
+        // NOTE: The order is important.. bind buffers first and then setup VAO!
         gl.bind_vertex_array(Some(self.vao));
         gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbuf.id));
         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ibuf.id));
+        // TODO: disable dangling attributes
         self::set_vertex_attributes(gl);
+
         gl.use_program(Some(self.program));
         gl.bind_texture(glow::TEXTURE_2D, self.tex);
 
@@ -203,27 +203,31 @@ impl Resources {
     pub unsafe fn unbind(gl: &glow::Context) {
         gl.bind_vertex_array(None);
         gl.use_program(None);
+        // TODO: disable attributes?
         gl.bind_texture(glow::TEXTURE_2D, None);
         gl.bind_buffer(glow::ARRAY_BUFFER, None);
         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
     }
 
-    pub unsafe fn draw(&self, gl: &glow::Context, base_elem: i32, n_elems: i32) {
-        gl.draw_elements(
+    pub unsafe fn draw(&self, gl: &glow::Context, n_elems: i32, idx_offset: i32, vtx_offset: i32) {
+        gl.draw_elements_base_vertex(
             // mode
             glow::TRIANGLES,
             // count
-            n_elems as i32,
-            // element_type: u16 index (unsighned short)
-            glow::UNSIGNED_SHORT,
-            // offset
-            base_elem * std::mem::size_of::<imgui::DrawIdx>() as i32,
+            n_elems,
+            if std::any::TypeId::of::<imgui::DrawIdx>() == std::any::TypeId::of::<u16>() {
+                glow::UNSIGNED_SHORT
+            } else {
+                glow::UNSIGNED_INT
+            },
+            idx_offset * size_of::<imgui::DrawIdx>() as i32,
+            vtx_offset,
         );
     }
 }
 
 pub unsafe fn set_vertex_attributes(gl: &glow::Context) {
-    let stride = std::mem::size_of::<imgui::DrawVert>() as i32;
+    let stride = size_of::<imgui::DrawVert>() as i32;
 
     // pos: [f32: 2]
     let index = 0;
@@ -259,7 +263,7 @@ pub unsafe fn set_vertex_attributes(gl: &glow::Context) {
         // stride
         stride,
         // offset
-        2 * std::mem::size_of::<f32>() as i32,
+        2 * size_of::<f32>() as i32,
     );
 
     // color: [u8: 2]
@@ -276,7 +280,7 @@ pub unsafe fn set_vertex_attributes(gl: &glow::Context) {
         // stride
         stride,
         // offset
-        4 * std::mem::size_of::<f32>() as i32,
+        4 * size_of::<f32>() as i32,
     );
 
     // TODO:

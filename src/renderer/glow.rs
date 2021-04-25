@@ -115,6 +115,8 @@ impl ImGuiGlow {
     fn before_render(&mut self, gl: &mut <Self as Renderer>::Device) {
         unsafe {
             self.res.bind(gl);
+            // reset offsets
+            self.res.reset_buf_offsets();
         }
     }
 
@@ -129,16 +131,20 @@ impl ImGuiGlow {
         gl: &mut <Self as Renderer>::Device,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        // on first draw call: set states
-        if params.idx_offset == 0 {
-            // 1. reset offsets
-            self.res.reset_buf_offsets();
+        log::trace!(
+            "{}, {}, {}",
+            params.vtx_offset,
+            params.idx_offset,
+            params.n_elems
+        );
 
-            // 2. append buffers
+        // set states on new set of draw call
+        if params.idx_offset == 0 {
+            // 1. append buffers
             self.res.append_vbuf(gl, params.vtx_buffer);
             self.res.append_ibuf(gl, params.idx_buffer);
 
-            // 3. set orthographic projection matrix
+            // 2. set orthographic projection matrix
             let mat = crate::helper::ortho_mat_gl(
                 // left, right
                 params.display.left(),
@@ -176,8 +182,9 @@ impl ImGuiGlow {
             // 3. draw
             self.res.draw(
                 gl,
-                params.idx_offset as i32,
                 params.n_elems as i32,
+                params.idx_offset as i32,
+                params.vtx_offset as i32,
             );
         }
 

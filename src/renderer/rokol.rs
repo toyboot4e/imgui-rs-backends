@@ -300,10 +300,11 @@ impl ImGuiRokolGfx {
         &mut self,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        // on first draw call: set states
+        // set states on new set of draw call
         if params.idx_offset == 0 {
             // 1. append buffers
             unsafe {
+                // self.binds.index_buffer_offset = rg::append_buffer(
                 rg::append_buffer(
                     self.binds.vertex_buffers[0],
                     std::slice::from_raw_parts(
@@ -311,7 +312,7 @@ impl ImGuiRokolGfx {
                         std::mem::size_of::<imgui::DrawVert>() * params.vtx_buffer.len(),
                     ),
                 );
-                rg::append_buffer(
+                self.binds.vertex_buffer_offsets[0] = rg::append_buffer(
                     self.binds.index_buffer,
                     std::slice::from_raw_parts(
                         params.idx_buffer.as_ptr() as *const u8,
@@ -340,6 +341,12 @@ impl ImGuiRokolGfx {
                 )
             };
             self.shd.set_vs_uniform(0, bytes);
+
+            log::trace!(
+                "offset change: {}, {}",
+                self.binds.vertex_buffer_offsets[0],
+                self.binds.index_buffer_offset
+            );
         }
 
         // 1. scissor
@@ -360,6 +367,7 @@ impl ImGuiRokolGfx {
         // 3. draw
         rg::apply_bindings(&self.binds);
         rg::draw(params.idx_offset as u32, params.n_elems as u32, 1);
+        // rg::draw(0, params.n_elems as u32, 1);
 
         Ok(())
     }
