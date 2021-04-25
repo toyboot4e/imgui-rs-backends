@@ -159,12 +159,12 @@ impl ImGuiGlow {
 
         unsafe {
             // 1. scissor
-            gl.scissor(
-                params.scissor.left() as i32,
-                params.scissor.top() as i32,
-                params.scissor.right() as i32,
-                params.scissor.bottom() as i32,
-            );
+            // gl.scissor(
+            //     params.scissor.left() as i32,
+            //     params.scissor.top() as i32,
+            //     params.scissor.right() as i32,
+            //     params.scissor.bottom() as i32,
+            // );
 
             // 2. set texture
             let tex = self
