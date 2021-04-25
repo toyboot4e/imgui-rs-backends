@@ -153,7 +153,7 @@ impl Resources {
 }
 
 impl Resources {
-    pub fn reset_offsets(&mut self) {
+    pub fn reset_buf_offsets(&mut self) {
         self.vbuf.reset_offset();
         self.ibuf.reset_offset();
     }
@@ -216,7 +216,7 @@ impl Resources {
             n_elems as i32,
             // element_type: u16 index (unsighned short)
             glow::UNSIGNED_SHORT,
-            // offset FIXME: in bytes?
+            // offset
             base_elem * std::mem::size_of::<imgui::DrawIdx>() as i32,
         );
     }

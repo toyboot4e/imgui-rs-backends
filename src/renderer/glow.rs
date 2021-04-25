@@ -129,12 +129,10 @@ impl ImGuiGlow {
         gl: &mut <Self as Renderer>::Device,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        log::trace!("{}", params.idx_offset);
-
         // on first draw call: set states
         if params.idx_offset == 0 {
             // 1. reset offsets
-            self.res.reset_offsets();
+            self.res.reset_buf_offsets();
 
             // 2. append buffers
             self.res.append_vbuf(gl, params.vtx_buffer);
@@ -176,10 +174,8 @@ impl ImGuiGlow {
             self.res.set_texture(tex_id);
 
             // 3. draw
-            self.res.bind(gl);
             self.res.draw(
                 gl,
-                // FIXME:
                 params.idx_offset as i32,
                 params.n_elems as i32,
             );
