@@ -288,6 +288,7 @@ impl ImGuiRokolGfx {
         self.binds.vertex_buffer_offsets[0] = 0;
         self.binds.index_buffer_offset = 0;
 
+        // FIXME: hard-coded backbuffer size
         rg::begin_default_pass(&rg::PassAction::LOAD, 1280, 720);
         self.shd.apply_pip();
     }
@@ -300,19 +301,24 @@ impl ImGuiRokolGfx {
         &mut self,
         params: &'a DrawParams,
     ) -> std::result::Result<(), <Self as Renderer>::Error> {
-        // set states on new set of draw call
+        log::trace!("draw: {}, {}", params.vtx_offset, params.idx_offset);
+
+        // on new `DrawList`
         if params.idx_offset == 0 {
+            // FIXME: don't use `append_buffer`. use batched CPU buffer
             // 1. append buffers
             unsafe {
-                // self.binds.index_buffer_offset = rg::append_buffer(
-                rg::append_buffer(
+                self.binds.vertex_buffer_offsets[0] = rg::append_buffer(
                     self.binds.vertex_buffers[0],
                     std::slice::from_raw_parts(
                         params.vtx_buffer.as_ptr() as *const u8,
                         std::mem::size_of::<imgui::DrawVert>() * params.vtx_buffer.len(),
                     ),
                 );
-                self.binds.vertex_buffer_offsets[0] = rg::append_buffer(
+
+                // FIXME:
+                self.binds.index_buffer_offset = rg::append_buffer(
+                // rg::append_buffer(
                     self.binds.index_buffer,
                     std::slice::from_raw_parts(
                         params.idx_buffer.as_ptr() as *const u8,
@@ -341,22 +347,17 @@ impl ImGuiRokolGfx {
                 )
             };
             self.shd.set_vs_uniform(0, bytes);
-
-            log::trace!(
-                "offset change: {}, {}",
-                self.binds.vertex_buffer_offsets[0],
-                self.binds.index_buffer_offset
-            );
         }
 
         // 1. scissor
-        // FIXME: crash happens
-        // rg::scissor_f(
-        //     params.scissor.left(),
-        //     params.scissor.up(),
-        //     params.scissor.width(),
-        //     params.scissor.height(),
-        // );
+        rg::scissor_f(
+            params.scissor.left(),
+            // NOTE: the y axis goes up, so we're swappping it
+            // FIXME: `params.scissor.top` and `params.scissor.bottom` is somehow swapped
+            params.display.height() - f32::max(params.scissor.top(), params.scissor.bottom()),
+            params.scissor.width(),
+            params.scissor.height(),
+        );
 
         // 2. set texture
         let tex = self
@@ -366,8 +367,8 @@ impl ImGuiRokolGfx {
 
         // 3. draw
         rg::apply_bindings(&self.binds);
-        rg::draw(params.idx_offset as u32, params.n_elems as u32, 1);
-        // rg::draw(0, params.n_elems as u32, 1);
+        rg::draw(0, params.n_elems as u32, 1);
+        // rg::draw(params.idx_offset as u32, params.n_elems as u32, 1);
 
         Ok(())
     }

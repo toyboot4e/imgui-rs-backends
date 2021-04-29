@@ -75,6 +75,9 @@ fn main() -> Result<()> {
     };
 
     let mut pump = handles.sdl.event_pump().map_err(Error::msg)?;
+    unsafe {
+        glow.clear_color(0.1, 0.2, 0.3, 1.0);
+    }
 
     'running: loop {
         for ev in pump.poll_iter() {

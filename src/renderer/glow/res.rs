@@ -100,6 +100,9 @@ pub struct Resources {
     // GPU buffers and texture slot
     vbuf: Buffer<imgui::DrawVert>,
     ibuf: Buffer<imgui::DrawIdx>,
+    // TODO:
+    // vbuf_cpu: Vec<imgui::DrawVert>,
+    // ibuf_cpu: Vec<imgui::DrawVert>,
     /// We won't free this texture on drop; basically a weak reference
     tex: Option<glow::Texture>,
 }

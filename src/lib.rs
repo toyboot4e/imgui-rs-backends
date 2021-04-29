@@ -106,6 +106,7 @@ where
         self.imgui.io_mut().update_delta_time(dt);
     }
 
+    /// TODO: begin frame with backbuffer size
     pub fn begin_frame<'a>(&'a mut self, window: &P::Window) -> BackendUi<'a, P, R> {
         self.platform.prepare_frame(self.imgui.io_mut(), window);
         BackendUi {

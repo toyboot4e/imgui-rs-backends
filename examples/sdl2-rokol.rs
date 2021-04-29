@@ -19,9 +19,10 @@ fn main() -> Result<()> {
     env_logger::init();
 
     let mut handles = rokol::glue::sdl::Init {
-        name: "SDL2 + Rokol".to_string(),
+        title: "SDL2 + Rokol".to_string(),
         w: W,
         h: H,
+        use_high_dpi: false,
         settings: Default::default(),
     }
     .init(|window_builder| {
@@ -71,8 +72,7 @@ fn main() -> Result<()> {
 
         let mut dummy_device = ();
         let ui = backend.begin_frame(&handles.win);
-        let mut b = true;
-        ui.show_demo_window(&mut b);
+        ui.show_demo_window(&mut true);
         ui.end_frame(&mut handles.win, &mut dummy_device)?;
 
         // swap buffer
