@@ -148,15 +148,13 @@ impl Rect {
     }
 
     pub fn width(&self) -> f32 {
-        // FIXME:
-        // (self.right - self.left).abs()
-        (self.right - self.left)
+        self.right - self.left
     }
 
     pub fn height(&self) -> f32 {
-        // FIXME: somehow the sign changes every frame
+        // FIXME: why
         // (self.top - self.bottom).abs()
-        (self.top - self.bottom)
+        (self.top - self.bottom).abs()
     }
 }
 
@@ -190,116 +188,117 @@ pub struct DrawParamsIterator<'a> {
     clip_off: [f32; 2],
     clip_scale: [f32; 2],
     display_rect: Rect,
-    // iterators
+    // data.iterator()
     draw_lists: imgui::DrawListIterator<'a>,
+    // states to pull `DrawCmd` one by one
     draw_list: Option<&'a imgui::DrawList>,
-    draw_commands: Option<imgui::DrawCmdIterator<'a>>,
+    draw_cmds: Option<imgui::DrawCmdIterator<'a>>,
 }
 
 impl<'a> DrawParamsIterator<'a> {
     pub fn new(data: &'a imgui::DrawData) -> Self {
-        // framebuffer size
-        let fb_width = data.display_size[0] * data.framebuffer_scale[0];
-        let fb_height = data.display_size[1] * data.framebuffer_scale[1];
-
-        let clip_off = data.display_pos;
-        let clip_scale = data.framebuffer_scale;
-
-        let display_rect = Rect {
-            left: data.display_pos[0],
-            right: data.display_pos[0] + data.display_size[0],
-            top: data.display_pos[1] + data.display_size[1],
-            bottom: data.display_pos[1],
+        let mut me = Self {
+            fb_width: data.display_size[0] * data.framebuffer_scale[0],
+            fb_height: data.display_size[1] * data.framebuffer_scale[1],
+            clip_off: data.display_pos,
+            clip_scale: data.framebuffer_scale,
+            display_rect: Rect {
+                left: data.display_pos[0],
+                right: data.display_pos[0] + data.display_size[0],
+                top: data.display_pos[1] + data.display_size[1],
+                bottom: data.display_pos[1],
+            },
+            draw_lists: data.draw_lists(),
+            draw_list: None,
+            draw_cmds: None,
         };
 
-        let mut draw_lists = data.draw_lists();
-
-        let (draw_list, draw_commands) = {
-            if fb_width <= 0.0 || fb_height <= 0.0 {
-                // return empty iterator
-                (None, None)
-            } else {
-                match draw_lists.next() {
-                    Some(list) => (Some(list), Some(list.commands())),
-                    None => (None, None),
-                }
-            }
-        };
-
-        Self {
-            fb_width,
-            fb_height,
-            clip_off,
-            clip_scale,
-            display_rect,
-            draw_lists,
-            draw_list,
-            draw_commands,
+        // set initial state
+        if let Some(draw_list) = me.draw_lists.next() {
+            me.draw_cmds = Some(draw_list.commands());
+            me.draw_list = Some(draw_list);
         }
+
+        me
+    }
+
+    /// Collects `DrawList` s into continuous vertex/index buffer
+    pub fn into_batched_buffer(
+        self,
+        _vbuf: &mut Vec<imgui::DrawVert>,
+        _ibuf: &mut Vec<imgui::DrawIdx>,
+    ) {
+        todo!()
+    }
+
+    /// One step of this loop:
+    /// ```no_run
+    /// for draw_list in draw_data.draw_lists() {
+    ///     for cmd in draw_list.commands() {
+    /// ```
+    fn next_draw_cmd(&mut self) -> Option<imgui::DrawCmd> {
+        while self.draw_list.is_some() {
+            if let Some(cmds) = self.draw_cmds.as_mut() {
+                if let Some(cmd) = cmds.next() {
+                    return Some(cmd);
+                }
+                self.draw_cmds = None;
+            } else {
+                let draw_list = self.draw_lists.next()?;
+                self.draw_cmds = Some(draw_list.commands());
+                self.draw_list = Some(draw_list);
+            }
+        }
+
+        None
     }
 }
 
 impl<'a> Iterator for DrawParamsIterator<'a> {
     type Item = DrawParams<'a>;
     fn next(&mut self) -> Option<Self::Item> {
+        if self.fb_width <= 0.0 || self.fb_height <= 0.0 {
+            return None;
+        }
+
         let clip_off = self.clip_off;
         let clip_scale = self.clip_scale;
         let fb_width = self.fb_width;
         let fb_height = self.fb_height;
         let display_rect = self.display_rect.clone();
 
-        // One step of this loop:
-        // for draw_list in draw_data.draw_lists() {
-        //     for cmd in draw_list.commands() {
         'next: loop {
-            let cmd = loop {
-                match self.draw_commands.as_mut()?.next() {
-                    Some(cmd) => break cmd,
-                    None => {
-                        // go to next list
-                        self.draw_list = self.draw_lists.next();
-                        self.draw_commands = Some(self.draw_list?.commands());
-                        continue;
-                    }
-                }
-            };
-
-            break match cmd {
+            return match self.next_draw_cmd()? {
                 DrawCmd::Elements { count, cmd_params } => {
-                    {
-                        let clip_rect = &cmd_params.clip_rect;
-                        // [left, up, right, down]
-                        let clip_rect = [
-                            (clip_rect[0] - clip_off[0]) * clip_scale[0],
-                            (clip_rect[1] - clip_off[1]) * clip_scale[1],
-                            (clip_rect[2] - clip_off[0]) * clip_scale[0],
-                            (clip_rect[3] - clip_off[1]) * clip_scale[1],
-                        ];
+                    let clip_rect = &cmd_params.clip_rect;
+                    // [left, up, right, down]
+                    let clip_rect = [
+                        (clip_rect[0] - clip_off[0]) * clip_scale[0],
+                        (clip_rect[1] - clip_off[1]) * clip_scale[1],
+                        (clip_rect[2] - clip_off[0]) * clip_scale[0],
+                        (clip_rect[3] - clip_off[1]) * clip_scale[1],
+                    ];
 
-                        if clip_rect[0] >= fb_width
-                            || clip_rect[1] >= fb_height
-                            || clip_rect[2] < 0.0
-                            || clip_rect[3] < 0.0
-                        {
-                            continue 'next;
-                        }
+                    if clip_rect[0] >= fb_width
+                        || clip_rect[1] >= fb_height
+                        || clip_rect[2] < 0.0
+                        || clip_rect[3] < 0.0
+                    {
+                        continue 'next;
                     }
 
-                    // [left, up, right, bottom]
-                    let [x, y, z, w] = cmd_params.clip_rect;
                     let scissor = Rect {
-                        left: x * clip_scale[0],
-                        // FIXME: is this correct
-                        top: fb_height - w * clip_scale[1],
-                        right: (z - x) * clip_scale[0],
-                        bottom: (w - y) * clip_scale[1],
+                        left: f32::max(0.0, clip_rect[0]).floor(),
+                        bottom: f32::max(0.0, fb_height - clip_rect[3]).floor(),
+                        right: (clip_rect[2]).ceil(),
+                        top: (clip_rect[3]).ceil(),
                     };
 
                     Some(DrawParams {
                         display: display_rect.clone(),
-                        vtx_buffer: self.draw_list?.vtx_buffer(),
+                        vtx_buffer: self.draw_list.unwrap().vtx_buffer(),
                         vtx_offset: cmd_params.vtx_offset,
-                        idx_buffer: self.draw_list?.idx_buffer(),
+                        idx_buffer: self.draw_list.unwrap().idx_buffer(),
                         idx_offset: cmd_params.idx_offset,
                         n_elems: count,
                         tex_id: cmd_params.texture_id,
