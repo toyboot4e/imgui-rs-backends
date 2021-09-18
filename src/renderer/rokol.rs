@@ -4,8 +4,11 @@
 
 use {
     anyhow::*,
-    imgui::{im_str, BackendFlags},
-    rokol::gfx::{self as rg, BakedResource},
+    imgui::BackendFlags,
+    rokol::{
+        ffi::gfx as rfg,
+        gfx::{self as rg, BakedResource},
+    },
     thiserror::Error,
 };
 
@@ -32,7 +35,7 @@ pub enum ImGuiRendererError {
     BadTexture(imgui::TextureId),
 }
 
-/// RAII
+/// RAII texture object on `rokol`
 #[derive(Debug)]
 pub struct Texture2d {
     pub img: rg::Image,
@@ -46,7 +49,7 @@ impl Drop for Texture2d {
     }
 }
 
-/// RAII
+/// RAII shader object on `rokol`
 #[derive(Debug)]
 pub struct Shader {
     shd: rg::Shader,
@@ -80,25 +83,27 @@ impl Shader {
 
 /// Memory layout of [`imgui::DrawVert`]
 ///
+/// ```
 /// pub struct DrawVert {
 ///     pub pos: [f32; 2],
 ///     pub uv: [f32; 2],
 ///     pub col: [u8; 4],
 /// }
+/// ```
 fn layout() -> rg::LayoutDesc {
     let mut desc = rg::LayoutDesc::default();
-    desc.attrs[0].format = rg::VertexFormat::Float2 as u32;
-    desc.attrs[1].format = rg::VertexFormat::Float2 as u32;
-    desc.attrs[2].format = rg::VertexFormat::UByte4N as u32;
+    desc.attrs[0].format = rg::VertexFormat::Float2.to_ffi();
+    desc.attrs[1].format = rg::VertexFormat::Float2.to_ffi();
+    desc.attrs[2].format = rg::VertexFormat::UByte4N.to_ffi();
     desc
 }
 
 /// Sets image type
 macro_rules! img_type {
-    ($name:expr,$ty:expr) => {
+    ($name:expr, $ty:expr) => {
         rg::ShaderImageDesc {
             name: concat!($name, "\0").as_ptr() as *const _,
-            image_type: $ty as u32,
+            image_type: $ty.to_ffi(),
             ..Default::default()
         }
     };
@@ -111,7 +116,7 @@ macro_rules! ub {
 
         block.uniforms[0] = rg::ShaderUniformDesc {
             name: concat!($name, "\0").as_ptr() as *const _,
-            type_: $uniform_ty as u32,
+            type_: $uniform_ty.to_ffi(),
             ..Default::default()
         };
         block.size += std::mem::size_of::<$size_ty>() as u64;
@@ -122,12 +127,12 @@ macro_rules! ub {
 
 const ALPHA_BLEND: rg::BlendState = rg::BlendState {
     enabled: true,
-    src_factor_rgb: rg::BlendFactor::SrcAlpha as u32,
-    dst_factor_rgb: rg::BlendFactor::OneMinusSrcAlpha as u32,
-    op_rgb: 0,
-    src_factor_alpha: rg::BlendFactor::One as u32,
-    dst_factor_alpha: rg::BlendFactor::Zero as u32,
-    op_alpha: 0,
+    src_factor_rgb: rfg::sg_blend_factor::SG_BLENDFACTOR_SRC_ALPHA,
+    dst_factor_rgb: rfg::sg_blend_factor::SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+    op_rgb: rfg::sg_blend_op::_SG_BLENDOP_DEFAULT,
+    src_factor_alpha: rfg::sg_blend_factor::SG_BLENDFACTOR_ONE,
+    dst_factor_alpha: rfg::sg_blend_factor::SG_BLENDFACTOR_ZERO,
+    op_alpha: rfg::sg_blend_op::_SG_BLENDOP_DEFAULT,
 };
 
 const VS: &'static str = concat!(include_str!("rokol/texture.vs"), '\0');
@@ -154,9 +159,9 @@ fn create_shader() -> Shader {
     let pip = rg::Pipeline::create(&{
         let mut desc = rg::PipelineDesc {
             shader: shd,
-            index_type: rg::IndexType::UInt16 as u32,
+            index_type: rg::IndexType::UInt16.to_ffi(),
             layout: self::layout(),
-            cull_mode: rg::CullMode::None as u32,
+            cull_mode: rg::CullMode::None.to_ffi(),
             ..Default::default()
         };
         desc.colors[0].blend = ALPHA_BLEND;
@@ -197,7 +202,7 @@ pub struct ImGuiRokolGfx {
 
 impl ImGuiRokolGfx {
     pub fn new(imgui: &mut imgui::Context) -> Result<Self, ImGuiRendererError> {
-        imgui.set_renderer_name(Some(im_str!(
+        imgui.set_renderer_name(Some(format!(
             "imgui-rokol-renderer {}",
             env!("CARGO_PKG_VERSION")
         )));
@@ -234,9 +239,9 @@ impl ImGuiRokolGfx {
 
             let img = rg::Image::create(&{
                 let mut desc = rg::ImageDesc {
-                    type_: rg::ImageType::Dim2 as u32,
+                    type_: rg::ImageType::Dim2.to_ffi(),
                     // FIXME: Is immutable OK?
-                    usage: rg::ResourceUsage::Immutable as u32,
+                    usage: rg::ResourceUsage::Immutable.to_ffi(),
                     width: w as i32,
                     height: h as i32,
                     ..Default::default()
@@ -318,7 +323,7 @@ impl ImGuiRokolGfx {
 
                 // FIXME:
                 self.binds.index_buffer_offset = rg::append_buffer(
-                // rg::append_buffer(
+                    // rg::append_buffer(
                     self.binds.index_buffer,
                     std::slice::from_raw_parts(
                         params.idx_buffer.as_ptr() as *const u8,

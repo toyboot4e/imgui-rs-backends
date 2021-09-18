@@ -41,6 +41,8 @@ ui.end_frame(&mut window, &mut glow)
 ```
 */
 
+pub extern crate imgui;
+
 pub mod helper;
 pub mod platform;
 pub mod renderer;
