@@ -141,12 +141,6 @@ const FS: &'static str = concat!(include_str!("rokol/texture.fs"), '\0');
 fn create_shader() -> Shader {
     log::trace!("creating imgui-rokol-gfx shader...");
 
-    // // FIXME: why include_str! not working
-    // let mut vs = std::fs::read_to_string("src/renderer/rokol/texture.vs").unwrap();
-    // vs.push('\0');
-    // let mut fs = std::fs::read_to_string("src/renderer/rokol/texture.fs").unwrap();
-    // fs.push('\0');
-
     let shd = rg::Shader::create(&{
         let mut desc = unsafe { rokol::gfx::shader_desc(VS, FS) };
         // let mut desc = unsafe { rokol::gfx::shader_desc(&vs, &fs) };
@@ -155,7 +149,6 @@ fn create_shader() -> Shader {
         desc
     });
 
-    log::trace!("creating imgui-rokol-gfx pipeline...");
     let pip = rg::Pipeline::create(&{
         let mut desc = rg::PipelineDesc {
             shader: shd,
@@ -274,31 +267,33 @@ impl ImGuiRokolGfx {
 impl Renderer for ImGuiRokolGfx {
     type Device = ();
     type Error = anyhow::Error;
+
     fn render(
         &mut self,
         draw_data: &imgui::DrawData,
         _device: &mut Self::Device,
     ) -> std::result::Result<(), Self::Error> {
-        self.before_render();
+        self.pre_render();
         for params in DrawParamsIterator::new(draw_data) {
             self.draw(&params)?;
         }
-        self.after_render();
+        self.post_render();
+
         Ok(())
     }
 }
 
 impl ImGuiRokolGfx {
-    fn before_render(&mut self) {
+    fn pre_render(&mut self) {
         self.binds.vertex_buffer_offsets[0] = 0;
         self.binds.index_buffer_offset = 0;
 
-        // FIXME: hard-coded backbuffer size
+        // FIXME: the hard-coded backbuffer size
         rg::begin_default_pass(&rg::PassAction::LOAD, 1280, 720);
         self.shd.apply_pip();
     }
 
-    fn after_render(&mut self) {
+    fn post_render(&mut self) {
         rg::end_pass();
     }
 

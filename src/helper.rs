@@ -197,7 +197,7 @@ pub struct DrawParamsIterator<'a> {
 
 impl<'a> DrawParamsIterator<'a> {
     pub fn new(data: &'a imgui::DrawData) -> Self {
-        let mut me = Self {
+        Self {
             fb_width: data.display_size[0] * data.framebuffer_scale[0],
             fb_height: data.display_size[1] * data.framebuffer_scale[1],
             clip_off: data.display_pos,
@@ -211,19 +211,11 @@ impl<'a> DrawParamsIterator<'a> {
             draw_lists: data.draw_lists(),
             draw_list: None,
             draw_cmds: None,
-        };
-
-        // set initial state
-        if let Some(draw_list) = me.draw_lists.next() {
-            me.draw_cmds = Some(draw_list.commands());
-            me.draw_list = Some(draw_list);
         }
-
-        me
     }
 
     /// Collects `DrawList` s into continuous vertex/index buffer
-    pub fn into_batched_buffer(
+    fn into_batched_buffer(
         self,
         _vbuf: &mut Vec<imgui::DrawVert>,
         _ibuf: &mut Vec<imgui::DrawIdx>,
@@ -237,20 +229,22 @@ impl<'a> DrawParamsIterator<'a> {
     ///     for cmd in draw_list.commands() {
     /// ```
     fn next_draw_cmd(&mut self) -> Option<imgui::DrawCmd> {
-        while self.draw_list.is_some() {
+        loop {
             if let Some(cmds) = self.draw_cmds.as_mut() {
                 if let Some(cmd) = cmds.next() {
                     return Some(cmd);
+                } else {
+                    self.draw_cmds = None;
                 }
-                self.draw_cmds = None;
-            } else {
-                let draw_list = self.draw_lists.next()?;
+            }
+
+            if let Some(draw_list) = self.draw_lists.next() {
                 self.draw_cmds = Some(draw_list.commands());
                 self.draw_list = Some(draw_list);
+            } else {
+                return None;
             }
         }
-
-        None
     }
 }
 
